@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Hexagon outline -->
+    <path
+        android:strokeColor="#7b78ff"
+        android:strokeWidth="3"
+        android:fillColor="#00000000"
+        android:pathData="M54,18 L78,32 L78,62 L54,76 L30,62 L30,32 Z" />
+    <!-- Inner node dots -->
+    <path android:fillColor="#7b78ff" android:pathData="M54,18 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <path android:fillColor="#7b78ff" android:pathData="M30,32 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <path android:fillColor="#7b78ff" android:pathData="M78,32 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <path android:fillColor="#7b78ff" android:pathData="M42,40 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <path android:fillColor="#7b78ff" android:pathData="M66,40 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <path android:fillColor="#7b78ff" android:pathData="M54,48 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <path android:fillColor="#7b78ff" android:pathData="M42,56 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <path android:fillColor="#7b78ff" android:pathData="M66,56 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <path android:fillColor="#7b78ff" android:pathData="M30,64 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <path android:fillColor="#7b78ff" android:pathData="M78,64 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <path android:fillColor="#7b78ff" android:pathData="M54,72 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <!-- Sample glyph path: clear = 05a (top to center to bottom) -->
+    <path
+        android:strokeColor="#cccfff"
+        android:strokeWidth="2.5"
+        android:fillColor="#00000000"
+        android:pathData="M54,18 L54,48 L54,72" />
+</vector>

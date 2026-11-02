@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dynamic Glyph</string>
+    <string name="capture_channel_name">Glyph Capture</string>
+    <string name="capture_channel_desc">Screen capture for glyph recognition</string>
+    <string name="capture_notification_title">Dynamic Glyph</string>
+    <string name="capture_notification_text">Recognizing glyphs…</string>
+    <string name="overlay_channel_name">Glyph Display</string>
+    <string name="overlay_channel_desc">Floating glyph sequence display</string>
+    <string name="permission_overlay_required">Overlay permission is required to show glyphs</string>
+    <string name="permission_capture_required">Screen capture permission is required</string>
+    <string name="start_capture">Start Capture</string>
+    <string name="stop_capture">Stop Capture</string>
+    <string name="load_tables">Load Glyph Tables</string>
+    <string name="status_idle">Idle</string>
+    <string name="status_capturing">Capturing</string>
+    <string name="status_recognizing">Recognizing</string>
+    <string name="no_table_loaded">No glyph table loaded</string>
+</resources>

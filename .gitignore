@@ -1,0 +1,21 @@
+# Build output
+*.iml
+.gradle/
+build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.hprof
+
+# IDE
+.idea/
+*.iws
+*.ipr
+.DS_Store
+
+# Third-party reference tables. Fetched by tools/fetch_reference_data.py;
+# never committed, because the upstream publishes no licence.
+local-data/
