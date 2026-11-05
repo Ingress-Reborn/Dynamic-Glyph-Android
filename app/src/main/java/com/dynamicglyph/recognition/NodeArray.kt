@@ -1,5 +1,8 @@
 package com.dynamicglyph.recognition
 
+import kotlin.math.abs
+import kotlin.math.sqrt
+
 /**
  * The eleven-node Glyph array, in normalised coordinates.
  *

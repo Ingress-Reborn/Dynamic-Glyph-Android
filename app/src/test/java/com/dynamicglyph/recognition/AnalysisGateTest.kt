@@ -78,10 +78,20 @@ class AnalysisGateTest {
     }
 
     @Test
-    fun `readings of different sizes never compare equal`() {
+    fun `the grid is a fixed size whatever the frame dimensions`() {
         val a = gate.read(100, 200) { _, _ -> 10 }!!
         val b = gate.read(120, 240) { _, _ -> 10 }!!
-        assertEquals(Int.MAX_VALUE, a.differenceFrom(b))
+        // The grid is always 12x24, so readings of different frame sizes are
+        // still comparable; it is the cell values that carry the difference.
+        assertEquals(LumaGate.GRID_COLUMNS * LumaGate.GRID_ROWS, b.cells.size)
+        assertEquals(0, a.differenceFrom(b))
+    }
+
+    @Test
+    fun `readings of different grid shapes never compare equal`() {
+        val whole = gate.read(100, 200) { _, _ -> 10 }!!
+        val truncated = LumaReading(1.0, 0.0, IntArray(4), true)
+        assertEquals(Int.MAX_VALUE, whole.differenceFrom(truncated))
     }
 
     @Test

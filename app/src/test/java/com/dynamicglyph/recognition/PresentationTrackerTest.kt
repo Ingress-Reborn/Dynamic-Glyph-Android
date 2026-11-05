@@ -147,7 +147,9 @@ class PresentationTrackerTest {
     fun `time moving backwards interrupts the session`() {
         val tracker = PresentationTracker(session)
         tracker.accept(evidence(1.0, slots = reading(2, 0)))
-        tracker.accept(evidence(0.5, slots = reading(2, 0)))
+        // No header in this frame: a fresh header would legitimately
+        // re-establish presentation, which is a different situation.
+        tracker.accept(evidence(0.5, slots = reading(2, 0), header = null))
 
         assertEquals(TrackingState.INTERRUPTED, tracker.state)
     }
@@ -156,7 +158,7 @@ class PresentationTrackerTest {
     fun `a frame gap beyond the maximum interrupts the session`() {
         val tracker = PresentationTracker(session)
         tracker.accept(evidence(0.0, slots = reading(2, 0)))
-        tracker.accept(evidence(5.0, slots = reading(2, 0)))
+        tracker.accept(evidence(5.0, slots = reading(2, 0), header = null))
 
         assertEquals(TrackingState.INTERRUPTED, tracker.state)
     }

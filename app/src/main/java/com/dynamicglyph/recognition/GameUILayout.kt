@@ -34,11 +34,10 @@ data class GameUILayout(
     /** The bottom of the top band that needs colour decoding. */
     val topBandBottom: Double get() = inputTimerBarBottom
 
-    /** Banner shadow edge tolerance in pixels. */
-    fun bannerEdgeTolerance(frameHeight: Int): Int =
-        kotlin.math.max(1, (0.002 * frameHeight).toInt())
-
-    /** Rows allowed for the banner's shadowed lower edge, about 2 px in 1218 px. */
+    /**
+     * Rows allowed for the banner's shadowed lower edge, about 2 px in a 1218 px
+     * frame. Rounded up, matching the original's `rounded(.up)`.
+     */
     fun bannerEdgeTolerance(frameHeight: Int): Int =
         maxOf(1, kotlin.math.ceil(0.002 * frameHeight).toInt())
 

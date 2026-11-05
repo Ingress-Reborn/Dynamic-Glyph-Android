@@ -113,21 +113,33 @@ Swift source.
 
 ## Verification status
 
-**This port has not been compiled.** The environment it was written in has no JDK,
-no Android SDK and no Gradle, so no `assembleDebug` was ever run. Treat the first
-build as a real step, not a formality.
+**Compiled and unit-tested; never run on a device.**
 
-The Gradle wrapper jar and `gradlew` scripts are binaries and are not included;
-generate them with Android Studio or `gradle wrapper --gradle-version 8.10.2`.
+A local toolchain (Temurin/Microsoft JDK 17, Gradle 8.10.2, Android SDK
+platform 35 + build-tools 35.0.0) was installed to build this. Results:
 
-What is in place to help:
+- `assembleDebug` — **BUILD SUCCESSFUL**. The first build surfaced 9 Kotlin
+  compile errors, all fixed: a duplicate `bannerEdgeTolerance` overload,
+  `Set.symmetricDifference` (absent from Kotlin's stdlib, added as an extension),
+  and missing `kotlin.math` imports. Five failing test assertions were also
+  corrected — they were wrong expectations, not wrong implementation.
+- `testDebugUnitTest` — **71 tests, 0 failures, 0 skipped**.
+- `apksigner verify` — passes with the v2 scheme, one signer.
+- `aapt2 dump badging` — `com.dynamicglyph.android`, minSdk 31 via manifest,
+  targetSdk 35, and all three required permissions present.
+- The APK bundles `assets/mlkit-google-ocr-models/` and
+  `lib/arm64-v8a/libmlkit_google_ocr_pipeline.so`, so OCR works without Google
+  Play services — important for a Chinese-market HyperOS device.
+- `app/build.gradle.kts` restricts `abiFilters` to `arm64-v8a`, cutting the debug
+  APK from 98 MB to 69 MB. Remove that block for a universal build.
 
-- `app/src/test/java/com/dynamicglyph/recognition/` — JVM unit tests for the
-  lattice and geometry, both table parsers, the direction-independent lookup, the
-  header phrase matcher, the tracker's boundary rules, and the luma gate. They
-  use synthetic fixtures, so they need no reference data.
-- Every non-obvious constant and rule carries the reason it exists, taken from
-  the original's own comments.
+The Gradle wrapper is included. On networks where `services.gradle.org` is
+unreachable, point `gradle/wrapper/gradle-wrapper.properties` at a mirror.
+
+What the tests cover: lattice and geometry, both CSV parsers, the
+direction-independent lookup, header phrase rules, the tracker's boundary
+rules, and the luma gate. They use synthetic fixtures and need no reference
+data.
 
 What is **not** covered by tests:
 
@@ -135,7 +147,8 @@ What is **not** covered by tests:
   pixels. The original tests these against a private screenshot corpus that is
   not distributed; this port has no equivalent, so their first real validation is
   a device run against the game.
-- The overlay rendering and the capture pipeline, which need a device.
+- The overlay rendering, MediaProjection capture, HyperOS permission flows and
+  the ML Kit output on a real frame — all of which need a device.
 
 ## Reference data
 

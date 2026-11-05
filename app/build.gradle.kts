@@ -16,6 +16,14 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // The bundled ML Kit OCR model ships a native library per ABI. Keeping
+        // all four makes the debug APK ~98 MB; a modern device such as the
+        // Redmi K80 Pro (Snapdragon 8 Elite) needs only arm64-v8a. To build a
+        // universal APK again, remove this block entirely.
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {

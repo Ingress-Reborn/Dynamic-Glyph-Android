@@ -6,3 +6,6 @@
 *.jpeg binary
 *.jar binary
 *.keystore binary
+
+# Windows batch files need CRLF; cmd.exe is not reliable with bare LF.
+*.bat text eol=crlf

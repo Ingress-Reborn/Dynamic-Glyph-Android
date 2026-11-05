@@ -1,14 +1,16 @@
 # Dynamic Glyph for Android
 
-> ### ⚠️ 未完工 · Work in progress — not built, not tested
+> ### ⚠️ 未完工 · Work in progress — builds and unit-tested, never run on a phone
 >
-> **中文：** 这个安卓版代码已经写完，但**一次都没有编译过，也没有在任何手机上运行过**。
-> 需要懂 Android 开发的人接手：先修编译错误，再在真机上试一次。
-> **请先读 [HANDOFF.md](HANDOFF.md)**（中文，大白话说明现状和下一步）。
+> **中文：** 已经**编译通过、71 个单元测试全部通过**，也生成了可安装的测试 APK。
+> 但**从未在任何真机上运行过**——识别效果、权限弹窗、坐标是否对得上，都还是未知数。
+> 需要一位懂 Android 的人（或愿意照着说明试一下的人）在真机上验证。
+> **请先读 [HANDOFF.md](HANDOFF.md)** 和 [测试说明-Redmi-K80-Pro.md](测试说明-Redmi-K80-Pro.md)。
 >
-> **English:** The code is written but has **never been compiled or run on a device**.
-> Someone with Android experience needs to take it from here: fix the build, then
-> try it on a real phone. Start with [HANDOFF.md](HANDOFF.md) (Chinese) and
+> **English:** It now **compiles and all 71 JVM unit tests pass**, and a signed
+> debug APK is available. It has **never been run on a real device**, so
+> recognition accuracy, permissions and screen-coordinate calibration are still
+> unverified. Start with [HANDOFF.md](HANDOFF.md) (Chinese) and
 > [PORTING.md](PORTING.md) (technical notes).
 
 An Android port of [Dynamic-Glyph](https://github.com/ChestnutLUO/Dynamic-Glyph),
@@ -27,9 +29,8 @@ helps you play it. That risk falls on your account.
 The reference tables are third-party data that is **not** included here; see
 [Reference tables](#reference-tables).
 
-And new: **this port has not been compiled.** It was written in an environment
-with no JDK, Android SDK or Gradle. Expect to fix build errors on the first
-`assembleDebug`. See [Verification](#verification).
+And: **it compiles, but it has never been run on a phone.** The first real
+device test is still outstanding. See [Verification](#verification).
 
 ## What it does
 
@@ -52,22 +53,23 @@ While a glyph hack is on screen the app:
 
 ## Build
 
-The Gradle wrapper's jar and the `gradlew` scripts are binaries and are not
-included. Generate them once, either by opening the project in Android Studio
-(which does it for you) or with a local Gradle:
+The Gradle wrapper is included, so no separate Gradle install is needed:
 
 ```sh
-gradle wrapper --gradle-version 8.10.2
+./gradlew test            # 71 JVM tests
+./gradlew assembleDebug   # produces app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Then:
-
-```sh
-./gradlew assembleDebug
-```
+The wrapper downloads Gradle from `services.gradle.org`. If that host is
+unreachable (common on some networks), replace the `distributionUrl` in
+`gradle/wrapper/gradle-wrapper.properties` with a mirror, for example
+`https://mirrors.cloud.tencent.com/gradle/gradle-8.10.2-bin.zip`.
 
 Install on a device. An emulator will not work: MediaProjection needs a real
 display.
+
+A ready-built, v2-signed arm64-only debug APK is in `dist/` for device testing
+(this folder is gitignored, so rebuild it if you clone the repository fresh).
 
 ## Reference tables
 
@@ -119,10 +121,18 @@ testable on the JVM and is the same split the original uses.
 
 ## Verification
 
-**Not compiled.** The unit tests have not been run either. Run both:
+**Done:** `assembleDebug` succeeds on JDK 17 / Gradle 8.10.2 / Android SDK 35.
+`testDebugUnitTest` runs 71 tests with 0 failures. The debug APK is signed
+(v2), declares the three required permissions, and bundles the ML Kit OCR
+model, so it does not need Google Play services.
+
+**Still outstanding:** no run on any device. The three pixel-based readers
+(`NodeArrayDetector`, `GlyphFrameRecognizer`, `SlotStripReader`) have no
+screenshot corpus here, so their first real validation is a device run against
+the game.
 
 ```sh
-./gradlew test          # lattice, tables, phrases, tracker, gate
+./gradlew test            # lattice, tables, phrases, tracker, gate
 ./gradlew assembleDebug
 ```
 

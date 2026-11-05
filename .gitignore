@@ -10,6 +10,10 @@ captures/
 *.aab
 *.hprof
 
+# Ready-to-install test APK. Kept locally, rebuilt with `gradlew assembleDebug`.
+# A 69 MB binary does not belong in git.
+dist/
+
 # IDE
 .idea/
 *.iws

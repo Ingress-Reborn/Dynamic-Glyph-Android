@@ -118,6 +118,8 @@ class LatticeTest {
     @Test
     fun `path encoding round trips`() {
         assertEquals("0568a975", GlyphPath("0568a975").encoded)
-        assertEquals("05a", GlyphPath("05a").reversed.encoded)
+        // Reversing a walk reverses the node order; "05a" backwards is "a50".
+        assertEquals("a50", GlyphPath("05a").reversed.encoded)
+        assertEquals("05a", GlyphPath("05a").reversed.reversed.encoded)
     }
 }

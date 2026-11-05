@@ -74,8 +74,11 @@ class GlyphTableTest {
         // must resolve to the same Glyph. This is the invariant that makes a
         // player drawing right-to-left still recognisable.
         assertEquals(GlyphID("alpha"), table.glyphByEdges(GlyphPath("05a")))
+        // "a50" is the same walk drawn the other way. "50a" is a *different*
+        // walk (5 -> 0 -> 10 crosses the top node), so it must not resolve to
+        // alpha: direction independence does not mean reordering the nodes.
         assertEquals(GlyphID("alpha"), table.glyphByEdges(GlyphPath("a50")))
-        assertEquals(GlyphID("alpha"), table.glyphByEdges(GlyphPath("50a")))
+        assertNull(table.glyphByEdges(GlyphPath("50a")))
     }
 
     @Test

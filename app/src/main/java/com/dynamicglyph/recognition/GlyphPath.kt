@@ -96,3 +96,13 @@ data class GlyphPath(val nodes: List<NodeIndex>) {
         }
     }
 }
+
+/**
+ * The edges present in exactly one of the two sets.
+ *
+ * Swift's `Set` has `symmetricDifference`; Kotlin's does not. The recogniser
+ * measures the distance between a measured edge set and a template as the size
+ * of this set: one missed or one spurious segment costs 1.
+ */
+fun Set<GlyphPath.Edge>.symmetricDifference(other: Set<GlyphPath.Edge>): Set<GlyphPath.Edge> =
+    (this - other) + (other - this)
