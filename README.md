@@ -4,7 +4,7 @@ Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android �
 
 **实时模式授权后自动识别，初始不显示悬浮窗或图标。** 当已确认前缀与唯一预测覆盖已知整组，或整组都已真实确认时，每轮自动弹出一次。开启自动隐藏后，窗口只显示可拖动的 Glyph 画布；游戏确认本轮绘制结束后自动隐藏，继续同一会话等待下一轮。通知提供“显示悬浮窗”和“停止”操作。
 
-当前行为与验收证据见 [REALTIME_VISIBILITY.md](Docs/REALTIME_VISIBILITY.md)，工程约束与用户七条规则见 [Plan.md](Plan.md)。最终生产源码 `e0c8f9d` 精确保留 ML Kit 三个反射入口，修复 Release OCR 的构造缺失，继续启用 R8。当前核心 **236 项（3 跳过、0 失败）**、Android 单元 **102 项**、构建/Lint、新签名 APK 核验和实际签名 Release **6 项界面流程通过**；Glyph 截图人工总审已通过，发布待完成。既有 Debug 界面 20 项、实采 7 项和尺寸矩阵因业务源码相同而复用，不声称重新运行。此前三次 CPU 观测未证实继续下降。
+当前行为与验收证据见 [REALTIME_VISIBILITY.md](Docs/REALTIME_VISIBILITY.md)，工程约束与用户七条规则见 [Plan.md](Plan.md)。最终生产源码 `e0c8f9d` 精确保留 ML Kit 三个反射入口，修复 Release OCR 的构造缺失，继续启用 R8。当前核心 **236 项（3 跳过、0 失败）**、Android 单元 **102 项**、构建/Lint、新签名 APK 核验和实际签名 Release **6 项界面流程通过**；Glyph 截图人工总审已通过，main 推送和 v0.4.1 Release 发布均已完成。既有 Debug 界面 20 项、实采 7 项和尺寸矩阵因业务源码相同而复用，不声称重新运行。此前三次 CPU 观测未证实继续下降。
 
 ## 当前功能
 
@@ -77,12 +77,4 @@ iOS 使用系统 Vision，Android 当前选择将离线 OCR 模型随包携带�
 
 [精简前迁移计划](Docs/HISTORY/PLAN_BEFORE_GLYPH_ONLY_2026-11-09.md)、[早期 Glyph 验收](Docs/GLYPH_PREDICTION.md)和[比例适配记录](Docs/ANDROID_ADAPTATION.md)均为历史资料。早期文档中的完整迁移、Room/Drive、录制、小米岛及 250ms OCR 说明不是当前产品范围或策略。旧矩阵测试与 CPU 数据对应各自旧包，不作为新版本结论。
 
-生产源码 `e0c8f9d` 已推送 [vhu231/Dynamic-Glyph-Android](https://github.com/vhu231/Dynamic-Glyph-Android) 的工作分支；完成最终签名包验收后更新 `main` 和 v0.4.1 Release。新增的 [szres/dynamic-glyph-android](https://github.com/szres/dynamic-glyph-android) 按用户最新要求暂不操作，不属于本轮交付阻塞项。实际 main 提交与发布链接记录在当前验收文档，未执行前不记为完成。
-
-## 许可证与来源
-
-本仓库代码是 **source-available（源码可读）**，使用 [PolyForm Noncommercial License 1.0.0](LICENSE)。许可证原文及其中的 `Required Notice:` 保持不变；具体使用、修改和分发条件以许可证为准。
-
-原项目名称与图标、第三方游戏素材及商标的说明见 [NOTICE.md](NOTICE.md)，贡献约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。Android 工作名称为 Glyph Lens，不改变原代码版权和许可条件。
-
-部分真实截图、录屏和参考测试输入未随仓库分发。缺少这些素材的测试需明确标为跳过，不能算作识别通过；原输入来源记录见 [测试素材说明](Packages/GlyphRecognition/Tests/GlyphRecognitionTests/Fixtures/PROVENANCE.md)。
+生产源码 `e0c8f9d` 已合入 [main](https://github.com/vhu231/Dynamic-Glyph-Android/tree/main)，[v0.4.1 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.1) 已发布为 Latest，附 [arm64 APK](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.1/Glyph-Lens-0.4.1-arm64.apk) 和校验文件。上传后重新下载的 APK 与受测文件哈希一致。新增的 [szres/dynamic-glyph-android](https://github.com/szres/dynamic-glyph-android) 按用户最新要求暂不操作。

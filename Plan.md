@@ -2,7 +2,7 @@
 
 更新日期：2026-11-09。
 
-**当前目标只保留 Glyph 自动识别与序列预测，仅支持 arm64。0.4.1 实现自动显示、可选的绘制完成后自动隐藏和通知控制。** 最终生产源码 `e0c8f9d` 使用原有 350ms/iOS 阶段判断，仅保留 ML Kit 三个实际反射构造入口，继续启用 R8。当前核心 236 项（3 跳过、0 失败）、Android 单元 102 项、构建/Lint、新签名 APK 核验及实际签名 6 项界面流程通过；Glyph 截图人工总审和发布尚待完成，证据见 [REALTIME_VISIBILITY.md](Docs/REALTIME_VISIBILITY.md)。
+**当前目标只保留 Glyph 自动识别与序列预测，仅支持 arm64。0.4.1 实现自动显示、可选的绘制完成后自动隐藏和通知控制。** 最终生产源码 `e0c8f9d` 使用原有 350ms/iOS 阶段判断，仅保留 ML Kit 三个实际反射构造入口，继续启用 R8。当前核心 236 项（3 跳过、0 失败）、Android 单元 102 项、构建/Lint、新签名 APK 核验及实际签名 6 项界面流程通过；Glyph 截图人工总审、main 推送和 v0.4.1 发布均已完成，证据见 [REALTIME_VISIBILITY.md](Docs/REALTIME_VISIBILITY.md)。
 
 精简前的计划全文已保存为 [历史计划](Docs/HISTORY/PLAN_BEFORE_GLYPH_ONLY_2026-11-09.md)。其中完整移植 P0–P6、岛接入、旧验收数据及 250ms 标题 OCR 策略均已归档，不是当前工作要求。
 
@@ -22,13 +22,13 @@
 
 ### 0.4.1 本轮顺序与提交发布约定
 
-1. 当前工作分支为 `codex/glyph-notification-visibility`。删除本轮自动停止，完成实时初始隐藏自动识别、整组结果自动显示、可选绘制完成后自动隐藏和通知控制；保留省电初始图标待命，不改变采样、阈值、帧率或 OCR 节奏。
+1. 实现分支为 `codex/glyph-notification-visibility`，交付已合入 `main`。删除本轮自动停止，完成实时初始隐藏自动识别、整组结果自动显示、可选绘制完成后自动隐藏和通知控制；保留省电初始图标待命，不改变采样、阈值、帧率或 OCR 节奏。
 2. 使用 38 边 `Long` 掩码替代逐帧模板 Set 差集；节点/槽位连通域搜索对同一像素在同次搜索中只判色一次。通过真实实现回归证明语义等价，不以放宽识别标准换性能。
 3. **全部实现、测试代码及文档完成落盘后，再统一执行测试。** 先前中间实现的检查不替代最终版本验收。随后对比已保存的 3 次 0.4.0 CPU 基线与新版本实测，记录输入、设备、采样和分析次数，不提前公布新的降幅。
 4. 按用户要求保存并推送已验证改动；**本轮最终验证后推送原仓库 `vhu231/Dynamic-Glyph-Android` 的 main，并发布新的 0.4.1 Release**。发布前完成对应产物、哈希、验证记录与发布说明，交付时记录实际 main 提交和 Release 链接。新增 `https://github.com/szres/dynamic-glyph-android` 按用户最新要求暂不操作，不合并其独立历史，也不作为本轮交付阻塞。
 5. 原始外部录屏、私有素材及 `build/` / APK 等构建输出不提交到源码仓库；发布 APK 使用 Release 附件。临时证据可链接被忽略的本地构建目录，不伪造未完成的检查或发布状态。
 
-当前生产提交 `e0c8f9d` 已推送 `origin/codex/glyph-notification-visibility`，尚未据此将 main 或 Release 标为完成。过程中的测试修正与撤回记录留在 Git 历史，当前范围与验收以本文及专项文档为准。0.4.0 的产物和原始证据保留在 [CALIBRATED_VISION.md](Docs/CALIBRATED_VISION.md)，不作为本轮记录。
+当前生产提交 `e0c8f9d` 已进入原仓库 `main`，发布提交及 `v0.4.1` 标签为 `912b7dbc420f21a0c6422c628a2e00d239ca11e6`；[Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.1) 已发布，下载 APK 的 SHA-256 与受测文件一致。过程中的测试修正与撤回记录留在 Git 历史，当前范围与验收以本文及专项文档为准。0.4.0 的产物和原始证据保留在 [CALIBRATED_VISION.md](Docs/CALIBRATED_VISION.md)，不作为本轮记录。
 
 ## 2. 强制通用规则
 
@@ -116,7 +116,7 @@ iOS 原版使用系统 Vision 能力，Android 当前选择随包离线 ML Kit�
 
 ## 7. 本轮验证与交付
 
-**当前源码统一构建与单元测试、新签名包核验和实际签名 6 项界面流程通过。** `e0c8f9d` 的核心 236 项（3 跳过、0 失败）、Android 单元 102 项通过，两种 Lint 各 0 错误、30 警告；六项签名流程中三个 ML Kit 组件真实反射构造及彻底停止均通过。Kotlin 业务源码与 `7bf1d51` 相同，复用既有 20 项界面、7 项 Debug 实采及矩阵，不声称本次重新运行。Glyph 截图人工总审已通过，发布待完成。此前 CPU 中位数 11.68s → 12.33s 未证实下降，不作为当前签名包的新性能证明。证据见 [REALTIME_VISIBILITY.md](Docs/REALTIME_VISIBILITY.md#5-041-验收与发布)。
+**当前源码统一构建与单元测试、新签名包核验和实际签名 6 项界面流程通过。** `e0c8f9d` 的核心 236 项（3 跳过、0 失败）、Android 单元 102 项通过，两种 Lint 各 0 错误、30 警告；六项签名流程中三个 ML Kit 组件真实反射构造及彻底停止均通过。Kotlin 业务源码与 `7bf1d51` 相同，复用既有 20 项界面、7 项 Debug 实采及矩阵，不声称本次重新运行。Glyph 截图人工总审已通过，main 推送和 v0.4.1 Release 发布均已完成。此前 CPU 中位数 11.68s → 12.33s 未证实下降，不作为当前签名包的新性能证明。证据见 [REALTIME_VISIBILITY.md](Docs/REALTIME_VISIBILITY.md#5-041-验收与发布)。
 
 下列功能勾选由当前单元与同 Kotlin 业务实现的既有 Debug 证据支持，不能代替新签名 Release 实际流程；CPU 项保留此前观测范围，不据此声称新版本降幅。
 
@@ -136,7 +136,7 @@ iOS 原版使用系统 Vision 能力，Android 当前选择随包离线 ML Kit�
 - [x] 新最终 APK 权限清单核验：无 INTERNET、麦克风或存储读写权限。
 - [x] 在实际签名 Release 上检查通知恢复与自动显示流程，区分自动断言和逐 Glyph 截图核对。
 - [x] 仅保留 CommonComponentRegistrar、TextRegistrar、VisionCommonRegistrar 三个实际反射入口；本次签名包的真实构造检查及六项界面流程通过，保持 R8 并重新核验新 APK；逐 Glyph 人工总审单列。
-- [ ] 完成验证后提交推送原仓库 main，创建新的 0.4.1 Release 并附 APK，记录 main 提交、tag、发布链接与资产哈希。
+- [x] 完成验证后提交推送原仓库 main，创建新的 0.4.1 Release 并附 APK，记录 main 提交、tag、发布链接与资产哈希。
 
 证据范围继续区分模拟环境和实体手机；录屏 fitCenter 验证只证明对应共享输出，不证明真实游戏重新布局或长期温度/电池表现。原始外部素材和构建输出不进入源码提交。
 

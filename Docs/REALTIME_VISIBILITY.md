@@ -4,7 +4,7 @@
 
 **实时模式授权后在后台自动识别，初始隐藏窗口与图标；整组确认或唯一预测就绪后自动显示。** 新增“绘制完成后自动隐藏”，默认关闭。开启后去掉顶部状态与 × 整行，仅显示可拖动的 Glyph 画布；本轮绘制结束后自动隐藏，继续同一会话等待下一轮。通知提供“显示悬浮窗”和“停止”。原“本轮识别完成后自动停止”、静态停止结果与结果窗重新开始按钮删除。
 
-本轮工作分支为 `codex/glyph-notification-visibility`，版本为 **versionCode 5 / 0.4.1**。最终生产提交 `e0c8f9d` 已推送，使用原有 350ms 标题有效期与 iOS 阶段判断，精确保留 ML Kit 三个反射构造入口以修复 Release OCR 初始化失败。当前核心 236 项（3 跳过、0 失败）、Android 单元 102 项、构建/Lint、新签名 APK 核验和实际 Release 六项界面流程均通过；Glyph 截图人工总审已通过，发布待完成。既有 Debug 界面、实采与尺寸矩阵因 Kotlin 业务实现相同而复用，证据范围见第 5 节。用户七条规则原文见 [Plan.md](../Plan.md#2-强制通用规则)。
+本轮实现分支为 `codex/glyph-notification-visibility`，已交付到 `main`，版本为 **versionCode 5 / 0.4.1**。最终生产提交 `e0c8f9d` 已推送，使用原有 350ms 标题有效期与 iOS 阶段判断，精确保留 ML Kit 三个反射构造入口以修复 Release OCR 初始化失败。当前核心 236 项（3 跳过、0 失败）、Android 单元 102 项、构建/Lint、新签名 APK 核验和实际 Release 六项界面流程均通过；Glyph 截图人工总审已通过，main 推送和 v0.4.1 Release 发布均已完成。既有 Debug 界面、实采与尺寸矩阵因 Kotlin 业务实现相同而复用，证据范围见第 5 节。用户七条规则原文见 [Plan.md](../Plan.md#2-强制通用规则)。
 
 ## 1. 启动与手动控制
 
@@ -103,7 +103,7 @@
 
 ## 5. 0.4.1 验收与发布
 
-当前生产提交为 **`e0c8f9da1d297d9c08266cbe27300ceac6570980`**，已推送工作分支。全部实现、测试和文档落盘后的统一构建及单元测试通过，新签名 APK 已核验；该实际签名包的六项界面流程全部通过，Glyph 截图人工总审已通过，main/Release 发布待完成。
+当前生产提交为 **`e0c8f9da1d297d9c08266cbe27300ceac6570980`**，已包含在 `main` 与 `v0.4.1` 标签中。全部实现、测试和文档落盘后的统一构建及单元测试通过，新签名 APK 已核验；该实际签名包的六项界面流程全部通过，Glyph 截图人工总审已通过，main 推送和 v0.4.1 Release 发布均已完成。
 
 ### 验证结果与适用范围
 
@@ -173,7 +173,7 @@
 
 ### 发布与验证限制
 
-实际签名 Release 的六项界面流程及真实构造已通过，截图人工总审也已通过，随后推送 `vhu231/Dynamic-Glyph-Android` 的 main 并发布 v0.4.1，记录实际提交、标签、链接和上传后资产哈希。当前发布尚未记为完成。
+已推送原仓库 `main` 并发布 [v0.4.1 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.1)，公开且标记为 Latest。发布提交及标签均指向 `912b7dbc420f21a0c6422c628a2e00d239ca11e6`，生产源码为 `e0c8f9d`；随后仅补齐发布核验记录。附件为 [arm64 APK](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.1/Glyph-Lens-0.4.1-arm64.apk) 与 [SHA256SUMS.txt](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.1/SHA256SUMS.txt)。GitHub 资产 digest 和上传后重新下载的 APK 均为上表的 `d13e3f…` 完整哈希，大小 15,808,043 bytes，与通过验收的签名文件完全一致。
 
 新增目标 [szres/dynamic-glyph-android](https://github.com/szres/dynamic-glyph-android) 按用户最新要求暂不操作，不推送、不合并其独立历史，也不作为本轮交付阻塞项。
 
