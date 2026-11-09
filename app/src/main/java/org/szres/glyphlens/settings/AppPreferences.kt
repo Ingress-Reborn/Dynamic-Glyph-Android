@@ -1,12 +1,9 @@
 package org.szres.glyphlens.settings
 
 import android.content.Context
-import org.szres.glyphlens.recognition.text.GameLanguage
-import org.szres.glyphlens.recognition.text.GameLanguageMemory
 
 class AppPreferences(context: Context) {
-    private val applicationContext = context.applicationContext
-    private val values = applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    private val values = context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     var recognitionMode: RecognitionMode
         get() {
@@ -22,22 +19,6 @@ class AppPreferences(context: Context) {
     var showsFloatingWindow: Boolean
         get() = values.getBoolean("display.floatingWindow", true)
         set(value) = values.edit().putBoolean("display.floatingWindow", value).apply()
-
-    var gameLanguage: GameLanguage?
-        get() = values.getString("game.language", null)?.let(GameLanguage::fromRawValue)
-        set(value) = values.edit().putString("game.language", value?.rawValue).apply()
-
-    var detectedGameLanguage: GameLanguage?
-        get() = values.getString("game.detectedLanguage", null)?.let(GameLanguage::fromRawValue)
-        set(value) = values.edit().putString("game.detectedLanguage", value?.rawValue).apply()
-
-    fun makeGameLanguageMemory(): GameLanguageMemory {
-        val locales = applicationContext.resources.configuration.locales
-        val preferred = (0 until locales.size()).map { locales[it].toLanguageTag() }
-        return makeGameLanguageMemory(gameLanguage, detectedGameLanguage, preferred) { found ->
-            detectedGameLanguage = found
-        }
-    }
 
     var protectsFloatingWindowFromCapture: Boolean
         get() = values.getBoolean("pip.preventsCapture", false)
@@ -67,16 +48,5 @@ class AppPreferences(context: Context) {
         const val CANVAS_WIDTH_KEY = "pip.canvas.width"
         const val CANVAS_HEIGHT_KEY = "pip.canvas.height"
         const val CANVAS_RESOLUTION_KEY = "pip.canvas.resolution"
-
-        internal fun makeGameLanguageMemory(
-            chosen: GameLanguage?,
-            remembered: GameLanguage?,
-            preferredLanguages: List<String>,
-            onChange: (GameLanguage) -> Unit = {},
-        ): GameLanguageMemory = GameLanguageMemory(
-            language = chosen ?: GameLanguageMemory.startingGuess(remembered, preferredLanguages),
-            isAutomatic = chosen == null,
-            onChange = onChange,
-        )
     }
 }

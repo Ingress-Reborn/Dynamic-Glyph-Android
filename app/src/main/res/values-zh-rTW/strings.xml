@@ -45,10 +45,6 @@
     <string name="settings_title">設定</string>
     <string name="setup_sharpness">清晰度</string>
     <string name="setup_sharpness_value">清晰度 · %1$d× · %2$d × %3$d px</string>
-    <string name="settings_game_language">遊戲語言</string>
-    <string name="settings_language_automatic">自動</string>
-    <string name="settings_language_detected">從遊戲畫面偵測到：%1$s。</string>
-    <string name="settings_language_waiting">會在首次 Hack 時從遊戲畫面偵測。</string>
     <string name="settings_canvas_width">寬度</string>
     <string name="settings_canvas_width_value">寬度：%1$d</string>
     <string name="settings_canvas_height">高度</string>

@@ -228,7 +228,7 @@ class GlyphDisplayRendererTest {
         revision = 1,
         liveness = CaptureLiveness.LIVE,
         state = state,
-        phaseSource = PhaseSource.HEADER_TEXT,
+        phaseSource = if (state == TrackingState.INPUT) PhaseSource.INPUT_TIMER else PhaseSource.INDICATOR_TRANSITION,
         acceptance = AcceptanceMode.TrackingSequence,
         sourceFrameTime = 5.0,
         evidenceArrivalUptime = 10.0,

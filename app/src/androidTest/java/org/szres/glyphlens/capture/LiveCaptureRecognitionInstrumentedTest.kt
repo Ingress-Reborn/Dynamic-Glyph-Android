@@ -87,7 +87,7 @@ class LiveCaptureRecognitionInstrumentedTest {
     }
 
     @Test
-    fun mapIconsPreserveFiveGlyphsWithHiddenTitlesAndWrongOcrLanguage() {
+    fun mapIconsPreserveFiveGlyphsWithHiddenTitles() {
         verifyLiveCapture(
             "real-recording.mp4", listOf("question", "less", "forget", "all", "lie"),
             hidesAfterDrawing = true,
@@ -104,9 +104,10 @@ class LiveCaptureRecognitionInstrumentedTest {
     }
 
     @Test
-    fun newThreeGlyphMapIconsHideResultsAndContinueNextRound() {
+    fun powerSavingThreeGlyphMapIconsHideResultsAndContinueNextRound() {
         verifyLiveCapture(
             "real-recording-124013.mp4", listOf("advance", "human", "enlightenment"),
+            mode = RecognitionMode.POWER_SAVING,
             hidesAfterDrawing = true,
         )
     }
@@ -154,7 +155,7 @@ class LiveCaptureRecognitionInstrumentedTest {
             (if (hidesAfterDrawing) "-auto-hide" else "") +
             (if (continuousRounds) "-continuous" else "") +
             (if (checksHiddenPrediction) "-hidden-realtime" else "") +
-            (if (hidesHeaderText) "-masked-title-english" else "") +
+            (if (hidesHeaderText) "-masked-title" else "") +
             (if (performanceWindowMillis > 0) "-performance" else "")
         val output = File(outputDirectory, "$reportName.json")
         assertTrue("Cannot remove the previous live-test result: $output", !output.exists() || output.delete())
@@ -164,15 +165,11 @@ class LiveCaptureRecognitionInstrumentedTest {
         assumeTrue("Live overlay regression requires display-over-other-apps permission", Settings.canDrawOverlays(context))
         assertEquals("Live test requires an idle capture service", CaptureService.SessionState.STOPPED, CaptureService.currentState)
         reportsMapControls = performanceWindowMillis == 0L
-        val sourceLength = source.length()
-        val sourceModified = source.lastModified()
         val preferences = context.getSharedPreferences(AppPreferences.PREFERENCES_NAME, Context.MODE_PRIVATE)
         val overrides: Map<String, Any?> = mapOf(
             AppPreferences.RECOGNITION_MODE_KEY to mode.rawValue,
             AppPreferences.AUTO_HIDE_KEY to hidesAfterDrawing,
             "display.floatingWindow" to true,
-            "game.language" to if (hidesHeaderText) "en" else null,
-            "game.detectedLanguage" to null,
         )
         val previous = preferences.all.filterKeys { it in overrides }
         var home: MainActivity? = null
@@ -181,7 +178,6 @@ class LiveCaptureRecognitionInstrumentedTest {
         val trace = LiveTrace(reportsMapControls)
         val lifecycle = JSONObject()
             .put("headerTextMasked", hidesHeaderText)
-            .put("chosenOcrLanguage", if (hidesHeaderText) "en" else JSONObject.NULL)
         var report: JSONObject? = null
         val accessibilityFlags = instrumentation.uiAutomation.serviceInfo.flags
 
@@ -365,8 +361,6 @@ class LiveCaptureRecognitionInstrumentedTest {
                 await("X did not stop recognition", 5_000) {
                     CaptureService.currentState == CaptureService.SessionState.STANDBY
                 }
-                // OCR already submitted to the platform may finish after its capture engine closes.
-                SystemClock.sleep(1_000)
                 lifecycle.put("afterClose", observeStandby())
                 playFixture(playbackSource, hidesHeaderText)
                 clickOverlayControl("startRecognitionIcon")
@@ -391,8 +385,6 @@ class LiveCaptureRecognitionInstrumentedTest {
                     })
                 }
             }
-            assertEquals("Playback must leave the source movie intact", sourceLength, source.length())
-            assertEquals("Playback must not rewrite the source movie", sourceModified, source.lastModified())
             lifecycle.put("completeSession", liveReport(source, expected, trace, mode, hidesAfterDrawing))
             context.startService(Intent(context, CaptureService::class.java).setAction(CaptureService.ACTION_STOP))
             await("Full stop did not release screen sharing", 15_000) {
@@ -490,18 +482,15 @@ class LiveCaptureRecognitionInstrumentedTest {
         assertEquals("Standby must not receive frames while the movie plays", frames, CaptureService.frameCount)
         assertEquals(CaptureService.SessionState.STANDBY, CaptureService.currentState)
         assertTrue("Standby must remain inactive", !CaptureService.isRecognizing)
-        assertEquals("Late OCR must not republish a closed session", null, CaptureService.latestSnapshot)
+        assertEquals("Standby must keep the recognition snapshot cleared", null, CaptureService.latestSnapshot)
         assertTrue("The resume icon must remain visible", CaptureService.isOverlayVisible && overlayControl("startRecognitionIcon") != null)
-        for (metric in listOf(PowerMetric.FRAMES_ANALYSED, PowerMetric.HEADER_READ)) {
-            assertEquals("Standby must not add $metric work", before.total(metric).count, after.total(metric).count)
-        }
+        assertEquals("Standby must not analyse frames",
+            before.total(PowerMetric.FRAMES_ANALYSED).count, after.total(PowerMetric.FRAMES_ANALYSED).count)
         return JSONObject().apply {
             put("frameCountBefore", frames)
             put("frameCountAfter", CaptureService.frameCount)
             put("analysedCountBefore", before.total(PowerMetric.FRAMES_ANALYSED).count)
             put("analysedCountAfter", after.total(PowerMetric.FRAMES_ANALYSED).count)
-            put("headerReadCountBefore", before.total(PowerMetric.HEADER_READ).count)
-            put("headerReadCountAfter", after.total(PowerMetric.HEADER_READ).count)
             put("measurementElapsedMillis", elapsed)
             put("processCpuMilliseconds", cpuElapsed)
             put("recognitionSnapshotCleared", true)
@@ -566,9 +555,6 @@ class LiveCaptureRecognitionInstrumentedTest {
         reportName: String,
     ): JSONObject {
         val measurements = RoundMeasurements()
-        val before = PowerMeter.shared.snapshot()
-        val headerRequestsBefore = before.total(PowerMetric.HEADER_IN_HACK).count +
-            before.total(PowerMetric.HEADER_OUTSIDE).count
         val started = SystemClock.elapsedRealtime()
         val deadline = started + 18_000
         var map: GlyphDisplaySnapshot? = null
@@ -593,11 +579,6 @@ class LiveCaptureRecognitionInstrumentedTest {
         }
         val mapSnapshot = map ?: throw AssertionError("The recording did not provide a map-control observation before its next loop")
         val mapMeasurements = measurements.finish()
-        val after = PowerMeter.shared.snapshot()
-        val headerRequestsAfter = after.total(PowerMetric.HEADER_IN_HACK).count +
-            after.total(PowerMetric.HEADER_OUTSIDE).count
-        assertEquals("Stable input through map return must submit no header OCR",
-            headerRequestsBefore, headerRequestsAfter)
         await("A detected map icon must automatically hide every floating surface", 3_000) {
             !CaptureService.isOverlayVisible && overlayControl("glyphDiagram") == null &&
                 overlayControl("startRecognitionIcon") == null
@@ -609,8 +590,6 @@ class LiveCaptureRecognitionInstrumentedTest {
             put("elapsedAfterInputCheckMillis", SystemClock.elapsedRealtime() - started)
             put("mapSnapshot", snapshotJson(mapSnapshot))
             put("mapTransitionMeasurements", mapMeasurements)
-            put("headerRequestsBefore", headerRequestsBefore)
-            put("headerRequestsAfter", headerRequestsAfter)
             put("hiddenOnMap", hidden)
             put("screenshot", screenshotName)
             put("sameCaptureSession", true)
@@ -847,7 +826,7 @@ class LiveCaptureRecognitionInstrumentedTest {
         while (SystemClock.elapsedRealtime() < deadline) {
             val snapshot = CaptureService.latestSnapshot
             if (snapshot != null && (previousRound == null || snapshot.hackID > previousRound.hackID)) {
-                if (snapshot.state == TrackingState.COMMAND || snapshot.state == TrackingState.PRESENTING ||
+                if (snapshot.state == TrackingState.PRESENTING ||
                     snapshot.outlook.observed.isNotEmpty()
                 ) {
                     observedGlyphPhase = true

@@ -9,7 +9,7 @@ import kotlin.math.ceil
  * Android capture supplies opaque, upright RGBA pixels. Alpha is therefore ignored.
  * Luminance uses the explicit full-range BT.601 integer approximation below; it is
  * not claimed to be byte-identical to CoreGraphics' DeviceGray conversion.
- * The owned RGBA bytes must remain unchanged while these views or asynchronous OCR use them.
+ * The owned RGBA bytes must remain unchanged while these views use them.
  */
 class ImageFrame private constructor(
     val luminance: LuminanceImage,

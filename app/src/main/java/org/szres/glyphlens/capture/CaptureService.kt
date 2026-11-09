@@ -229,9 +229,7 @@ class CaptureService : Service() {
         try {
             val engine = GlyphCaptureEngine(
                 tables = tables,
-                preferences = preferences,
                 sessionID = CaptureSessionID(SystemClock.elapsedRealtimeNanos().toULong()),
-                handler = handler,
                 meter = PowerMeter.shared,
             )
             captureEngine = engine

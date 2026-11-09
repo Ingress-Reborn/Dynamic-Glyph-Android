@@ -14,8 +14,8 @@ android {
         applicationId = "org.szres.glyphlens"
         minSdk = 29
         targetSdk = 37
-        versionCode = 6
-        versionName = "0.4.2"
+        versionCode = 7
+        versionName = "0.4.3"
         testInstrumentationRunner = providers.gradleProperty("glyphTestRunner")
             .orElse("androidx.test.runner.AndroidJUnitRunner").get()
         ndk {
@@ -25,7 +25,6 @@ android {
 
     buildTypes {
         release {
-            proguardFiles("proguard-rules.pro")
             optimization {
                 enable = true
             }
@@ -51,10 +50,6 @@ kotlin {
 dependencies {
     implementation(libs.androidx.activity)
     implementation(libs.androidx.core)
-    implementation(libs.mlkit.text)
-    implementation(libs.mlkit.text.chinese)
-    implementation(libs.mlkit.text.japanese)
-    implementation(libs.mlkit.text.korean)
     implementation(project(":recognition"))
 
     testImplementation(libs.junit)

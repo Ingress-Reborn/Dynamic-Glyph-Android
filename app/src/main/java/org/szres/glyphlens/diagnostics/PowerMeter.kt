@@ -10,9 +10,6 @@ import kotlin.math.min
 enum class PowerMetric(val label: String) {
     FRAMES_DELIVERED("delivered"),
     FRAMES_ANALYSED("analysed"),
-    HEADER_IN_HACK("header hack"),
-    HEADER_OUTSIDE("header out"),
-    HEADER_READ("header read"),
     FRAME_WORK("whole frame"),
     CONVERSION("RGBA->lum"),
     CAPTURE_COPY("capture copy"),
@@ -25,8 +22,6 @@ enum class PowerMetric(val label: String) {
     DISPLAY_LATENCY("display lag");
 
     companion object {
-        val headerWork = listOf(HEADER_IN_HACK, HEADER_OUTSIDE)
-        val textReads = listOf(HEADER_READ)
         val recognitionSteps = listOf(
             FRAME_WORK, CAPTURE_COPY, CONVERSION, GRID_HUNT, GLYPH_READ, SLOT_STRIP,
             FRAME_INTAKE, SKIPPED_FRAME,
@@ -34,7 +29,7 @@ enum class PowerMetric(val label: String) {
         val displaySteps = listOf(DISPLAY_UPDATE, DISPLAY_LATENCY)
 
         /** Non-overlapping wall-time runs used only for the report's untimed-work pointer. */
-        val topLevel = textReads + listOf(
+        val topLevel = listOf(
             FRAME_WORK, CAPTURE_COPY, FRAME_INTAKE, SKIPPED_FRAME, DISPLAY_UPDATE,
         )
     }
@@ -592,16 +587,11 @@ object PowerReport {
         }
         lines += modeLines(snapshot.modes)
 
-        lines += row("header work", "n", "/min")
-        for (metric in PowerMetric.headerWork) {
-            lines += row(metric.label, snapshot.total(metric).count.toString(), rate(snapshot.perMinute(metric)))
-        }
-        lines += timingTable("text read", PowerMetric.textReads, snapshot)
         lines += timingTable("recognition", PowerMetric.recognitionSteps, snapshot, includeEmptyWholeFrame = true)
         lines += timingTable("display", PowerMetric.displaySteps, snapshot)
 
         lines += row("longest", "max ms", "at")
-        for (metric in PowerMetric.textReads + PowerMetric.recognitionSteps + PowerMetric.displaySteps) {
+        for (metric in PowerMetric.recognitionSteps + PowerMetric.displaySteps) {
             if (snapshot.total(metric).maxNanoseconds > 0) {
                 lines += row(
                     metric.label, milliseconds(snapshot.total(metric).maxMilliseconds),

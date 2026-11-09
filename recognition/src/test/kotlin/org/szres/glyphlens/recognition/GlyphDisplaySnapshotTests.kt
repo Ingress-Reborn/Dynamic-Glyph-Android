@@ -9,7 +9,7 @@ class GlyphDisplaySnapshotTests {
     private fun snapshot(
         liveness: CaptureLiveness = CaptureLiveness.LIVE,
         state: TrackingState = TrackingState.PRESENTING,
-        phaseSource: PhaseSource = PhaseSource.HEADER_TEXT,
+        phaseSource: PhaseSource = PhaseSource.INDICATOR_TRANSITION,
         acceptance: AcceptanceMode = AcceptanceMode.TrackingSequence,
         evidenceArrivalUptime: Double = 10.0,
         slots: List<SlotObservation> = emptyList(),
@@ -106,7 +106,7 @@ class GlyphDisplaySnapshotTests {
         assertEquals("Watching the sequence", snapshot().statusLine(10.0))
         assertEquals("Paused", snapshot().statusLine(13.0))
         assertEquals(
-            "Watching the sequence · header hidden",
+            "Watching the sequence · waiting for indicators",
             snapshot(phaseSource = PhaseSource.RETAINED).statusLine(10.0),
         )
         assertEquals(

@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="glyph_only_subtitle">グリフ認識とシーケンス予測</string>
-    <string name="glyph_language_hint">Ingress の表示言語を選択します。変更するには認識を停止してください。</string>
     <string name="glyph_mode_colors">認識段階に応じてウィンドウの色を変更</string>
 </resources>

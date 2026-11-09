@@ -19,26 +19,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:text="@string/settings_game_language"
-            android:textColor="@color/primary_text"
-            android:textSize="20sp"
-            android:textStyle="bold" />
-        <Spinner
-            android:id="@+id/settingsGameLanguageSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:contentDescription="@string/settings_game_language" />
-        <TextView
-            android:id="@+id/settingsDetectedLanguageText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textColor="@color/secondary_text"
-            android:textSize="13sp" />
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
             android:text="@string/floating_window"
             android:textColor="@color/primary_text"
             android:textSize="20sp"

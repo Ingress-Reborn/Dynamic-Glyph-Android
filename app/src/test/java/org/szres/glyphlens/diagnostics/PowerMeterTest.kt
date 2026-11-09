@@ -161,7 +161,7 @@ class PowerMeterTest {
             meter.record(PowerMetric.FRAME_WORK, milliseconds * 1_000_000L)
         }
         clock.now += SECOND / 10
-        meter.record(PowerMetric.HEADER_READ, 80_000_000L)
+        meter.record(PowerMetric.GRID_HUNT, 80_000_000L)
         clock.now += SECOND / 100
         meter.record(PowerMetric.CAPTURE_COPY, 12_000_000L)
         clock.now += SECOND / 100
@@ -171,13 +171,12 @@ class PowerMeterTest {
         assertEquals(4, snapshot.timing(PowerMetric.FRAME_WORK).retainedSamples)
         assertEquals(30.0, snapshot.timing(PowerMetric.FRAME_WORK).p50Milliseconds!!, 1e-9)
         assertEquals(50.0, snapshot.timing(PowerMetric.FRAME_WORK).p95Milliseconds!!, 1e-9)
-        assertEquals(80.0, snapshot.timing(PowerMetric.HEADER_READ).p50Milliseconds!!, 1e-9)
+        assertEquals(80.0, snapshot.timing(PowerMetric.GRID_HUNT).p50Milliseconds!!, 1e-9)
         assertEquals(12.0, snapshot.timing(PowerMetric.CAPTURE_COPY).p95Milliseconds!!, 1e-9)
         assertEquals(35.0, snapshot.timing(PowerMetric.DISPLAY_LATENCY).p50Milliseconds!!, 1e-9)
         assertNull(snapshot.timing(PowerMetric.GLYPH_READ).p50Milliseconds)
 
         val lines = PowerReport.lines(snapshot)
-        assertTrue(lines.any { it.startsWith("text read") })
         assertTrue(lines.any { it.startsWith("recognition") })
         assertTrue(lines.any { it.startsWith("display") })
         assertTrue(lines.any { it.startsWith("longest") })
@@ -190,11 +189,11 @@ class PowerMeterTest {
         val meter = meter(clock)
         meter.reset()
         meter.record(PowerMetric.DISPLAY_LATENCY, 50_000_000L)
-        meter.record(PowerMetric.HEADER_READ, 50_000_000L)
+        meter.record(PowerMetric.GLYPH_READ, 50_000_000L)
         val snapshot = meter.snapshot()
         assertEquals(1, snapshot.total(PowerMetric.DISPLAY_LATENCY).count)
         assertEquals(50.0, snapshot.timing(PowerMetric.DISPLAY_LATENCY).p95Milliseconds!!, 1e-9)
-        assertEquals(0, snapshot.total(PowerMetric.HEADER_READ).count)
+        assertEquals(0, snapshot.total(PowerMetric.GLYPH_READ).count)
     }
 
     @Test
@@ -235,23 +234,23 @@ class PowerMeterTest {
         clock.lowPower = true
         clock.memory = 99 * 1_048_576L
         meter.count(PowerMetric.FRAMES_DELIVERED)
-        meter.record(PowerMetric.HEADER_READ, 1_000_000)
+        meter.record(PowerMetric.GLYPH_READ, 1_000_000)
         assertTrue(meter.snapshot().ended)
         assertEquals(stopped.elapsedSeconds, meter.snapshot().elapsedSeconds, 0.0)
         assertEquals(stopped.cpuSeconds!!, meter.snapshot().cpuSeconds!!, 0.0)
         assertEquals(21, meter.snapshot().total(PowerMetric.FRAMES_DELIVERED).count)
-        assertEquals(0, meter.snapshot().total(PowerMetric.HEADER_READ).count)
+        assertEquals(0, meter.snapshot().total(PowerMetric.GLYPH_READ).count)
         assertEquals(2, meter.snapshot().thermalStatus)
         assertEquals(false, meter.snapshot().lowPowerMode)
         assertEquals(32 * 1_048_576L, meter.snapshot().memoryFootprintBytes)
 
         meter.reset()
         clock.now += SECOND
-        meter.record(PowerMetric.HEADER_READ, 2 * SECOND) // Began before this reset.
+        meter.record(PowerMetric.GLYPH_READ, 2 * SECOND) // Began before this reset.
         val started = meter.now() - SECOND / 2
         clock.now += SECOND
         meter.finish(PowerMetric.CONVERSION, started)
-        assertEquals(0, meter.snapshot().total(PowerMetric.HEADER_READ).count)
+        assertEquals(0, meter.snapshot().total(PowerMetric.GLYPH_READ).count)
         assertEquals(1, meter.snapshot().total(PowerMetric.CONVERSION).count)
     }
 

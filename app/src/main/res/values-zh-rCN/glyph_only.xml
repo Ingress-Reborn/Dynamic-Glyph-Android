@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="glyph_only_subtitle">Glyph 识别与序列预测</string>
-    <string name="glyph_language_hint">选择 Ingress 使用的语言，停止识别后可修改。</string>
     <string name="glyph_mode_colors">根据识别阶段调整窗口颜色</string>
 </resources>
