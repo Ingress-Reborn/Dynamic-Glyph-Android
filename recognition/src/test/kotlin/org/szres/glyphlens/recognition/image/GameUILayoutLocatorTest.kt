@@ -9,6 +9,30 @@ import kotlin.math.roundToInt
 
 class GameUILayoutLocatorTest {
     @Test
+    fun persistentUnderlineDoesNotDelayTheBriefBlankMarkerPrelude() {
+        val viewport = Viewport(603, 1508, 1.0, 0, 98)
+        val (empty, blank) = listOf(
+            SyntheticSlotBands.Canvas(),
+            SyntheticSlotBands.Canvas().apply { SyntheticSlotBands.singleMarker().image.pixels.copyInto(pixels) },
+        ).map { canvas ->
+            canvas.fill(110..113, 100..503, intArrayOf(185, 165, 240))
+            viewport.place(scene(canvas.band()))
+        }
+        val fit = requireNotNull(NodeArrayDetector().detect(empty.luminance))
+        val locator = GameUILayoutLocator()
+        locator.observe(empty.topBand.image, fit, 0.0)
+        assertEquals(SlotStripRejection.InconsistentMarkerWidths, locator.lastSlotResult.exceptionOrNull())
+        assertEquals(SlotStripRejection.InconsistentMarkerWidths, SlotStripReader().read(blank).exceptionOrNull())
+
+        locator.observe(blank.topBand.image, fit, 0.05)
+        assertEquals(1, locator.lastSlotResult.getOrThrow().slotCount)
+        assertEquals(null, locator.lastSlotResult.getOrThrow().highlightedIndex)
+        locator.observe(blank.topBand.image, fit, 0.10)
+        assertTrue(locator.lastSlotUsedCache)
+        assertEquals(null, locator.lastSlotResult.getOrThrow().highlightedIndex)
+    }
+
+    @Test
     fun newlyAppearingClippedSingleMarkerIsLocatedBeforePeriodicSearch() {
         val viewport = Viewport(603, 1508, 1.0, 0, 98)
         val empty = viewport.place(scene(SyntheticSlotBands.Canvas().band()))

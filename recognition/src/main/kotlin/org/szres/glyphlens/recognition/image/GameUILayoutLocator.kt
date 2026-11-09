@@ -25,6 +25,7 @@ class GameUILayoutLocator {
     private var height = 0
     private var nextSearch = Double.NEGATIVE_INFINITY
     private var nextTimerSearch = Double.NEGATIVE_INFINITY
+    private var provisionalMarkerRows: IntRange? = null
 
     fun reset() {
         layout = GameUILayout()
@@ -39,6 +40,7 @@ class GameUILayoutLocator {
         height = 0
         nextSearch = Double.NEGATIVE_INFINITY
         nextTimerSearch = Double.NEGATIVE_INFINITY
+        provisionalMarkerRows = null
     }
 
     /** The image must contain the whole frame, including bands outside the old iOS crop. */
@@ -48,16 +50,21 @@ class GameUILayoutLocator {
         height = image.height
         if (calibration != null) anchor = calibration
         val band = FrameTopBand(image, image.height)
-        val previouslyEmpty = lastSlotResult.exceptionOrNull() == SlotStripRejection.NoMarkers
         lastSlotResult = slotReader.read(band)
         val reading = lastSlotResult.getOrNull()
-        // A newly appearing hexagon can be clipped by the provisional band. Waiting for
-        // the next periodic search can lose its brief blank prelude before the first Glyph.
-        val markersAppeared = previouslyEmpty && lastSlotResult.exceptionOrNull() != SlotStripRejection.NoMarkers
+        val previousRows = provisionalMarkerRows
+        val markerRows = slotReader.lastMarkerRows
+        provisionalMarkerRows = markerRows
+        // A title underline can keep the provisional strip invalid before a clipped hexagon
+        // appears. Its new vertical extent must trigger a search before the blank prelude ends.
+        val tolerance = max(2.0, height * 0.002)
+        val markerExtentChanged = !located && markerRows != null && (previousRows == null ||
+            abs(markerRows.first - previousRows.first) > tolerance ||
+            abs(markerRows.last - previousRows.last) > tolerance)
         val fullWidthArray = calibration != null && abs(calibration.size.x / 0.75 - width) <= width * 0.025
         if (reading != null && (located || fullWidthArray)) {
             located = true
-        } else if (calibration != null && (sourceTime >= nextSearch || markersAppeared)) {
+        } else if (calibration != null && (sourceTime >= nextSearch || markerExtentChanged)) {
             nextSearch = sourceTime + 0.5
             locateStrip(image, calibration)?.let {
                 layout = it.layout

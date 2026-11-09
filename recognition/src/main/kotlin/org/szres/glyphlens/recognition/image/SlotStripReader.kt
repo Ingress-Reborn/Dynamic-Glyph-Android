@@ -53,12 +53,15 @@ class SlotStripReader(val layout: GameUILayout = GameUILayout()) {
         private set
     var usedCachedMarkers = false
         private set
+    internal var lastMarkerRows: IntRange? = null
+        private set
 
     fun read(frame: ImageFrame): Result<SlotStripReading> = read(frame.topBand)
 
     fun read(band: FrameTopBand): Result<SlotStripReading> {
         lastPixelReadCount = 0
         usedCachedMarkers = false
+        lastMarkerRows = null
         cachedStrip?.let { cached ->
             if (cached.width == band.image.width && cached.height == band.image.height &&
                 cached.frameHeight == band.frameHeight && cached.layout == layout
@@ -108,6 +111,8 @@ class SlotStripReader(val layout: GameUILayout = GameUILayout()) {
             }
             if (lit >= wholeRow) lastCoveredRow = y
         }
+        val markerBottom = lastRows.max()
+        lastMarkerRows = if (markerBottom >= 0) firstRows.min()..markerBottom else null
 
         lastCoveredRow?.let { coveredRow ->
             // A thin window edge is discarded once, then ordinary checks apply below it.

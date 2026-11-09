@@ -161,6 +161,12 @@ public final class ReleaseUiCaptureInstrumentedTest {
         } catch (Throwable failure) {
             report.put("status", "failed").put("failureMessage", failure.getMessage());
             saveScreenshot(new File(output, "failure.png"));
+            launchHome();
+            report.put("failurePrimaryAction", text(awaitNode("primaryButton", 5_000)));
+            report.put("failureLiveStatus", text(awaitNode("homeLiveStatus", 5_000)));
+            report.put("failureCaptureStatus", text(awaitNode("statusText", 5_000)));
+            report.put("failureCalibration", preferences.getString(calibrationKey, null));
+            saveScreenshot(new File(output, "failure-home.png"));
             throw failure;
         } finally {
             try {
@@ -184,16 +190,30 @@ public final class ReleaseUiCaptureInstrumentedTest {
 
     private void observeDeviceGlyph(File output, String run, JSONObject report) throws Exception {
         long started = SystemClock.elapsedRealtime();
+        JSONArray stages = new JSONArray();
+        report.put(run + "UiStages", stages);
+        String previousStatus = "";
+        boolean savedInputDiagnostic = false;
         while (SystemClock.elapsedRealtime() - started < 10_000) {
             assertNoProjectionConsent();
             AccessibilityNodeInfo status = findAppNode("dragHandle");
-            if (status != null && YOUR_TURN.equals(text(status))) {
+            String statusText = status == null ? "hidden" : text(status);
+            if (!statusText.equals(previousStatus)) {
+                stages.put(new JSONObject().put("elapsedMillis", SystemClock.elapsedRealtime() - started)
+                        .put("status", statusText));
+                previousStatus = statusText;
+            }
+            if (YOUR_TURN.equals(statusText)) {
                 awaitNode("glyphDiagram", 1_000);
                 String screenshot = run + "-input.png";
                 saveScreenshot(new File(output, screenshot));
                 report.put(run + "InputElapsedMillis", SystemClock.elapsedRealtime() - started);
                 report.put(run + "InputScreenshot", screenshot);
                 return;
+            }
+            if ("restored".equals(run) && !savedInputDiagnostic && SystemClock.elapsedRealtime() - started >= 5_700) {
+                saveScreenshot(new File(output, "restored-expected-input.png"));
+                savedInputDiagnostic = true;
             }
             SystemClock.sleep(50);
         }
