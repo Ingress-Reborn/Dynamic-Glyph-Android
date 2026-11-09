@@ -10,6 +10,7 @@ import kotlin.math.roundToInt
 class MapControlReader {
     private companion object {
         val BUTTON_SURROUND = intArrayOf(112, 248, 540, 792, 912, 775, 515, 231)
+        val LAYER_INTERIOR = intArrayOf(398, 400, 464)
     }
 
     enum class Kind { DIAMOND, SIGNAL, LAYERS, PLUS, BRIEFCASE }
@@ -154,6 +155,16 @@ class MapControlReader {
             ) {
                 if (++misses > allowedBrightMisses) return false
             }
+        }
+        if (pattern.kind == Kind.LAYERS) {
+            // The top layer is filled; an outlined letter can match its edge probes.
+            var filled = 0
+            for (point in LAYER_INTERIOR) {
+                val x = (located.left + (point % 32) * located.scale).roundToInt()
+                val y = (located.top + (point / 32) * located.scale).roundToInt()
+                if (bright(image, x, y, neutral = true)) filled++
+            }
+            if (filled < 2) return false
         }
         misses = 0
         for (point in pattern.required) {

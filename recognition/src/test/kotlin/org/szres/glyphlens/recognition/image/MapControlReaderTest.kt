@@ -14,6 +14,21 @@ import kotlin.math.roundToInt
 
 class MapControlReaderTest {
     @Test
+    fun recordedIncomingSequenceTitleDoesNotBecomeALayersButton() {
+        val title = requireNotNull(javaClass.getResourceAsStream("/map-controls/incoming-sequence-title.png"))
+            .use { ImageIO.read(it) }
+        for (width in listOf(588, 603)) {
+            val scale = width / 588.0
+            val scene = canvas(width, (1280 * scale).roundToInt())
+            val graphics = scene.createGraphics()
+            graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+            graphics.drawImage(title, 0, (65 * scale).roundToInt(), width, (title.height * scale).roundToInt(), null)
+            graphics.dispose()
+            assertNull("Recorded title at width $width", MapControlReader().read(rgb(scene), 0.0))
+        }
+    }
+
+    @Test
     fun everyControlIsSufficientWithoutAnyOtherControlOrGlyphCalibration() {
         for (kind in MapControlReader.Kind.entries) {
             val image = controlScene(kind, 603, 1311, 60)
