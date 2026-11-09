@@ -120,7 +120,7 @@ class GlyphCaptureEngineTest {
     }
 
     @Test
-    fun presentationKeepsHeaderCadenceAndTimerProvenInputSkipsGlyphAndOcrWork() {
+    fun presentationKeepsHeaderCadenceAndFrozenInputWaitsForMapOrNextPresentationWithoutOcr() {
         val submissions = mutableListOf<GameTextSchedule.Request>()
         val meter = PowerMeter().apply { reset() }
         var phase = GamePhase.presenting
@@ -174,18 +174,27 @@ class GlyphCaptureEngineTest {
             engine.process(glyphScreen(2.8, rings = true, slot = true), power)
             assertEquals(TrackingState.INPUT, engine.latest.state)
             assertEquals(PhaseSource.RETAINED, engine.latest.phaseSource)
-            assertEquals("Losing the timer must resume OCR immediately", beforeInputReads + 1, submissions.size)
-            assertEquals(2.8, submissions.last().sourceTime, 1e-8)
+            assertEquals("A missing timer must not restart completion OCR", beforeInputReads, submissions.size)
             assertEquals(afterInputCounts.getValue(PowerMetric.GLYPH_READ) + 1,
                 meter.snapshot().total(PowerMetric.GLYPH_READ).count)
             assertTrue(engine.latest.isFrozen)
             assertEquals(frozen.slots, engine.latest.slots)
 
             engine.process(glyphScreen(2.91, rings = true, slot = true), power)
-            assertEquals(PhaseSource.HEADER_TEXT, engine.latest.phaseSource)
-            assertEquals(beforeInputReads + 2, submissions.size)
-            assertEquals(2.91, submissions.last().sourceTime, 1e-8)
+            assertEquals(PhaseSource.RETAINED, engine.latest.phaseSource)
+            assertEquals(beforeInputReads, submissions.size)
             assertEquals(frozen.slots, engine.latest.slots)
+
+            for (at in listOf(3.5, 3.6, 3.7)) {
+                engine.process(glyphScreen(at, rings = true, slot = true), power)
+                assertEquals(beforeInputReads, submissions.size)
+            }
+            phase = GamePhase.presenting
+            engine.process(glyphScreen(3.8, rings = true, slot = true, highlighted = true), power)
+            assertEquals(TrackingState.PRESENTING, engine.latest.state)
+            assertEquals(frozen.hackID + 1, engine.latest.hackID)
+            assertEquals("A new pixel-proven presentation restores the normal header lane", beforeInputReads + 1, submissions.size)
+            assertEquals(3.8, submissions.last().sourceTime, 1e-8)
         }
     }
 
@@ -207,6 +216,52 @@ class GlyphCaptureEngineTest {
             for ((previous, current) in submissions.zipWithNext()) {
                 assertEquals(0.22, current.sourceTime - previous.sourceTime, 1e-8)
             }
+        }
+    }
+
+    @Test
+    fun aMapControlSkipsShapeAndOcrWithoutCompletingOrChangingTheHack() {
+        val submissions = mutableListOf<GameTextSchedule.Request>()
+        val meter = PowerMeter().apply { reset() }
+        fixture(meter = meter, operation = GameOcrOperation { work ->
+            submissions += work.request
+            GameOcrOutcome(header = HeaderReading(GamePhase.presenting, "GLYPH SEQUENCE", 1.0, work.request.sourceTime))
+        }).use { engine ->
+            engine.process(mapScreen(1.0), power)
+            assertTrue(engine.latest.hasMapControl)
+            assertEquals(0, engine.latest.hackID)
+            assertEquals(TrackingState.INACTIVE, engine.latest.state)
+            assertTrue(submissions.isEmpty())
+            assertEquals(0L, meter.snapshot().total(PowerMetric.GLYPH_READ).count)
+            assertEquals(0L, meter.snapshot().total(PowerMetric.GRID_HUNT).count)
+
+            for (at in listOf(1.4, 1.51, 1.62)) engine.process(glyphScreen(at, rings = true, slot = true), power)
+            assertFalse(engine.latest.hasMapControl)
+            assertEquals(TrackingState.PRESENTING, engine.latest.state)
+            engine.process(glyphScreen(2.0, rings = true, slot = true, timer = true), power)
+            val input = engine.latest
+            assertEquals(TrackingState.INPUT, input.state)
+            val reads = submissions.size
+            val shapes = meter.snapshot().total(PowerMetric.GLYPH_READ).count
+            val hunts = meter.snapshot().total(PowerMetric.GRID_HUNT).count
+            for (at in listOf(2.4, 2.7, 3.0)) {
+                engine.process(mapScreen(at), power)
+                assertTrue(engine.latest.hasMapControl)
+                assertEquals(input.hackID, engine.latest.hackID)
+                assertEquals(input.state, engine.latest.state)
+                assertEquals(input.slots, engine.latest.slots)
+                assertEquals(input.outlook, engine.latest.outlook)
+            }
+            assertEquals(reads, submissions.size)
+            assertEquals(shapes, meter.snapshot().total(PowerMetric.GLYPH_READ).count)
+            assertEquals(hunts, meter.snapshot().total(PowerMetric.GRID_HUNT).count)
+
+            for (at in listOf(4.0, 4.11, 4.22)) engine.process(glyphScreen(at, rings = true, slot = true), power)
+            engine.process(glyphScreen(4.33, rings = true, slot = true, highlighted = true), power)
+            assertFalse(engine.latest.hasMapControl)
+            assertEquals(TrackingState.PRESENTING, engine.latest.state)
+            assertEquals(input.hackID + 1, engine.latest.hackID)
+            assertTrue(submissions.size > reads)
         }
     }
 
@@ -262,6 +317,28 @@ class GlyphCaptureEngineTest {
         (at * 1_000_000_000.0).toLong(),
         ByteArray(20 * 40 * 4),
     )
+
+    private fun mapScreen(at: Double): RgbaFrame {
+        val width = 320
+        val height = 520
+        val pixels = ByteArray(width * height * 4)
+        for (y in 130..160) {
+            for (x in 10..40) {
+                val outer = x == 10 || x == 40 || y == 130 || y == 160
+                val inner = x in 15..35 && y in 135..155 && (x == 15 || x == 35 || y == 135 || y == 155)
+                val plus = x in 24..26 && y in 140..150 || y in 144..146 && x in 20..30
+                val color = when {
+                    plus -> intArrayOf(230, 230, 240)
+                    inner -> intArrayOf(185, 185, 220)
+                    outer -> intArrayOf(100, 110, 160)
+                    else -> continue
+                }
+                val offset = (y * width + x) * 4
+                for (channel in 0..2) pixels[offset + channel] = color[channel].toByte()
+            }
+        }
+        return RgbaFrame(width, height, (at * 1_000_000_000.0).toLong(), pixels)
+    }
 
     private fun glyphScreen(
         at: Double,

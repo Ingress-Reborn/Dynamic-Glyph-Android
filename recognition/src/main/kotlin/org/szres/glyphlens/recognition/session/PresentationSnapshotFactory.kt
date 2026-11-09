@@ -26,6 +26,7 @@ class PresentationSnapshotFactory(
         liveness: CaptureLiveness = CaptureLiveness.LIVE,
         acceptance: AcceptanceMode = AcceptanceMode.TrackingSequence,
         calibration: NodeArrayDetection? = observation?.calibration,
+        hasMapControl: Boolean = false,
     ): GlyphDisplaySnapshot {
         val prefix = tracker.confirmedPrefix
         val expected = tracker.expectedSlotCount
@@ -74,6 +75,7 @@ class PresentationSnapshotFactory(
             provisionalExtensionCount = observation?.extensions?.size ?: 0,
             outlook = cachedOutlook,
             calibrationSummary = calibrationSummary,
+            hasMapControl = hasMapControl,
         )
     }
 }

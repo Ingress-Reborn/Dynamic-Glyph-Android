@@ -15,6 +15,6 @@
     <string name="notification_show_overlay">顯示浮動視窗</string>
     <string name="notification_realtime_hidden_text">視窗已隱藏，識別繼續執行。結果就緒後每輪自動顯示一次，也可點選顯示浮動視窗。</string>
     <string name="overlay_hide">隱藏浮動視窗</string>
-    <string name="auto_hide_after_drawing">繪製完成後自動隱藏</string>
-    <string name="auto_hide_after_drawing_hint">遊戲確認本輪繪製結束後隱藏視窗，並繼續識別下一輪。開啟後隱藏頂部控制列，可從通知列顯示視窗或停止識別。</string>
+    <string name="auto_hide_after_drawing">返回地圖後自動隱藏</string>
+    <string name="auto_hide_after_drawing_hint">偵測到主地圖上的任一按鈕時隱藏視窗，背景繼續識別。開啟後只保留可拖曳的 Glyph 畫布，可從通知列停止識別。</string>
 </resources>

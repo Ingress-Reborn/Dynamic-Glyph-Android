@@ -31,7 +31,6 @@ import org.szres.glyphlens.diagnostics.PowerMetric
 import org.szres.glyphlens.diagnostics.PowerReport
 import org.szres.glyphlens.recognition.CaptureLiveness
 import org.szres.glyphlens.recognition.GlyphDisplaySnapshot
-import org.szres.glyphlens.recognition.PhaseSource
 import org.szres.glyphlens.recognition.PredictionState
 import org.szres.glyphlens.recognition.SlotObservation
 import org.szres.glyphlens.recognition.TrackingState
@@ -46,6 +45,7 @@ import java.io.File
 class LiveCaptureRecognitionInstrumentedTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
+    private var reportsMapControls = true
 
     @Test
     fun fiveGlyphVideoIsRecognizedAndPredictedThroughLiveProjection() {
@@ -70,7 +70,7 @@ class LiveCaptureRecognitionInstrumentedTest {
     }
 
     @Test
-    fun realtimeAutomaticallyHidesAfterDrawingAndContinuesNextRound() {
+    fun realtimeMapIconsHideResultsAndContinueNextRound() {
         verifyLiveCapture(
             "real-recording.mp4", listOf("question", "less", "forget", "all", "lie"),
             hidesAfterDrawing = true,
@@ -78,11 +78,45 @@ class LiveCaptureRecognitionInstrumentedTest {
     }
 
     @Test
-    fun powerSavingAutomaticallyHidesAfterDrawingAndContinuesNextRound() {
+    fun powerSavingMapIconsHideResultsAndContinueNextRound() {
         verifyLiveCapture(
             "real-recording.mp4", listOf("question", "less", "forget", "all", "lie"),
             mode = RecognitionMode.POWER_SAVING,
             hidesAfterDrawing = true,
+        )
+    }
+
+    @Test
+    fun mapIconsPreserveFiveGlyphsWithHiddenTitlesAndWrongOcrLanguage() {
+        verifyLiveCapture(
+            "real-recording.mp4", listOf("question", "less", "forget", "all", "lie"),
+            hidesAfterDrawing = true,
+            hidesHeaderText = true,
+        )
+    }
+
+    @Test
+    fun threeGlyphMapIconsHideResultsAfterDirectReturn() {
+        verifyLiveCapture(
+            "real-recording-093906.mp4", listOf("nourish", "xm", "portal"),
+            hidesAfterDrawing = true,
+        )
+    }
+
+    @Test
+    fun newThreeGlyphMapIconsHideResultsAndContinueNextRound() {
+        verifyLiveCapture(
+            "real-recording-124013.mp4", listOf("advance", "human", "enlightenment"),
+            hidesAfterDrawing = true,
+        )
+    }
+
+    @Test
+    fun fiveGlyphFullPlaybackPerformance() {
+        verifyLiveCapture(
+            "real-recording.mp4", listOf("question", "less", "forget", "all", "lie"),
+            hidesAfterDrawing = true,
+            performanceWindowMillis = 30_000,
         )
     }
 
@@ -110,6 +144,8 @@ class LiveCaptureRecognitionInstrumentedTest {
         hidesAfterDrawing: Boolean = false,
         continuousRounds: Boolean = false,
         checksHiddenPrediction: Boolean = false,
+        hidesHeaderText: Boolean = false,
+        performanceWindowMillis: Long = 0,
     ) {
         val source = File(context.getExternalFilesDir(null), fileName)
         val outputDirectory = File(context.getExternalFilesDir(null), "live-capture-tests").apply { mkdirs() }
@@ -117,7 +153,9 @@ class LiveCaptureRecognitionInstrumentedTest {
             (if (mode == RecognitionMode.POWER_SAVING) "-power-saving" else "") +
             (if (hidesAfterDrawing) "-auto-hide" else "") +
             (if (continuousRounds) "-continuous" else "") +
-            (if (checksHiddenPrediction) "-hidden-realtime" else "")
+            (if (checksHiddenPrediction) "-hidden-realtime" else "") +
+            (if (hidesHeaderText) "-masked-title-english" else "") +
+            (if (performanceWindowMillis > 0) "-performance" else "")
         val output = File(outputDirectory, "$reportName.json")
         assertTrue("Cannot remove the previous live-test result: $output", !output.exists() || output.delete())
         val failureImage = File(outputDirectory, "$reportName-failure.png")
@@ -125,6 +163,7 @@ class LiveCaptureRecognitionInstrumentedTest {
         assumeTrue("Live MediaProjection fixture missing: ${source.absolutePath}", source.isFile)
         assumeTrue("Live overlay regression requires display-over-other-apps permission", Settings.canDrawOverlays(context))
         assertEquals("Live test requires an idle capture service", CaptureService.SessionState.STOPPED, CaptureService.currentState)
+        reportsMapControls = performanceWindowMillis == 0L
         val sourceLength = source.length()
         val sourceModified = source.lastModified()
         val preferences = context.getSharedPreferences(AppPreferences.PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -132,15 +171,17 @@ class LiveCaptureRecognitionInstrumentedTest {
             AppPreferences.RECOGNITION_MODE_KEY to mode.rawValue,
             AppPreferences.AUTO_HIDE_KEY to hidesAfterDrawing,
             "display.floatingWindow" to true,
-            "game.language" to null,
+            "game.language" to if (hidesHeaderText) "en" else null,
             "game.detectedLanguage" to null,
         )
         val previous = preferences.all.filterKeys { it in overrides }
         var home: MainActivity? = null
         var playerStarted = false
         var requestedCapture = false
-        val trace = LiveTrace()
+        val trace = LiveTrace(reportsMapControls)
         val lifecycle = JSONObject()
+            .put("headerTextMasked", hidesHeaderText)
+            .put("chosenOcrLanguage", if (hidesHeaderText) "en" else JSONObject.NULL)
         var report: JSONObject? = null
         val accessibilityFlags = instrumentation.uiAutomation.serviceInfo.flags
 
@@ -193,12 +234,14 @@ class LiveCaptureRecognitionInstrumentedTest {
                 lifecycle.put("hiddenBeforePlayback", observeHiddenSession(initial, durationMillis = 1_000))
             }
 
-            playFixture(playbackSource)
+            val fullPlaybackMeasurements = RoundMeasurements()
+            val playbackStartedAt = SystemClock.elapsedRealtime()
+            playFixture(playbackSource, hidesHeaderText)
             playerStarted = true
             if (mode == RecognitionMode.POWER_SAVING) {
                 assertEquals("Power saving must not acquire any frame before the icon is tapped", 0L, CaptureService.frameCount)
                 lifecycle.put("initialStandby", observeStandby())
-                playFixture(playbackSource)
+                playFixture(playbackSource, hidesHeaderText)
                 clickOverlayControl("startRecognitionIcon")
                 await("The icon did not begin recognition", 15_000) {
                     CaptureService.currentState == CaptureService.SessionState.RUNNING
@@ -223,7 +266,7 @@ class LiveCaptureRecognitionInstrumentedTest {
             if (continuousRounds) {
                 val nextTrace = LiveTrace()
                 var nextAcceptance: AcceptedSession? = null
-                playFixture(playbackSource)
+                playFixture(playbackSource, hidesHeaderText)
                 try {
                     nextAcceptance = observePredictionAndFrozenInput(
                         fileName, expected, nextTrace, hidesAfterDrawing = false,
@@ -263,7 +306,7 @@ class LiveCaptureRecognitionInstrumentedTest {
                     lifecycle.put("nextAutomaticPopup", it)
                 }
                 var nextAcceptance: AcceptedSession? = null
-                playFixture(playbackSource)
+                playFixture(playbackSource, hidesHeaderText)
                 try {
                     nextAcceptance = observePredictionAndFrozenInput(
                         fileName, expected, nextTrace, hidesAfterDrawing = false,
@@ -280,28 +323,28 @@ class LiveCaptureRecognitionInstrumentedTest {
                     })
                 }
             }
-            if (hidesAfterDrawing) {
-                lifecycle.put("drawingCompleted", observeDrawingCompletion(accepted.input, trace, reportName))
-                showFromNotification("$reportName-after-completion")
-                val restored = requireNotNull(CaptureService.latestSnapshot)
-                assertEquals("Notification must keep the same continuous recognition session",
-                    accepted.input.captureSessionID, restored.captureSessionID)
-                assertEquals("Notification must restore the same completed sequence", accepted.input.slots, restored.slots)
-                assertControlsHidden()
-                val restoredAt = SystemClock.elapsedRealtime()
-                while (SystemClock.elapsedRealtime() - restoredAt < 1_000) {
-                    assertTrue("Manual Show after completion must not be hidden again every frame", CaptureService.isOverlayVisible)
-                    assertControlsHidden()
-                    SystemClock.sleep(50)
+            if (performanceWindowMillis > 0) {
+                while (SystemClock.elapsedRealtime() - playbackStartedAt < performanceWindowMillis) {
+                    val current = requireNotNull(CaptureService.latestSnapshot)
+                    assertEquals(accepted.input.captureSessionID, current.captureSessionID)
+                    assertEquals("Full playback must retain the five confirmed Glyphs", accepted.input.slots, current.slots)
+                    assertEquals(CaptureService.SessionState.RUNNING, CaptureService.currentState)
+                    trace.observe(current)
+                    SystemClock.sleep(20)
                 }
-                lifecycle.put("completedResultRestoredFromNotification", true)
+                lifecycle.put("fullPlaybackMeasurements", fullPlaybackMeasurements.finish())
+                lifecycle.put("performanceWindowMillis", performanceWindowMillis)
+            } else if (hidesAfterDrawing) {
+                lifecycle.put("mapReturned", observeMapReturn(accepted.input, trace, reportName))
+                showFromNotification("$reportName-on-map", expectsVisible = false)
+                lifecycle.put("mapStillHidesAfterNotification", observeHiddenSession(accepted.input, durationMillis = 750))
                 val nextTrace = LiveTrace()
                 val nextPopup = JSONObject().also {
                     it.put("screenshotPrefix", reportName)
                     lifecycle.put("nextAutomaticPopup", it)
                 }
                 var nextAcceptance: AcceptedSession? = null
-                playFixture(playbackSource)
+                playFixture(playbackSource, hidesHeaderText)
                 try {
                     nextAcceptance = observePredictionAndFrozenInput(
                         fileName, expected, nextTrace, hidesAfterDrawing = true,
@@ -309,7 +352,7 @@ class LiveCaptureRecognitionInstrumentedTest {
                     )
                     assertEquals("Automatic rounds must share the same capture session",
                         accepted.input.captureSessionID, nextAcceptance.input.captureSessionID)
-                    lifecycle.put("nextDrawingCompleted", observeDrawingCompletion(nextAcceptance.input, nextTrace, "$reportName-next"))
+                    lifecycle.put("nextMapReturned", observeMapReturn(nextAcceptance.input, nextTrace, "$reportName-next"))
                     lifecycle.put("continuedAutomaticallyWithoutRestart", true)
                 } finally {
                     lifecycle.put("automaticNextRound", liveReport(source, expected, nextTrace, mode, true, accepted = nextAcceptance).apply {
@@ -325,7 +368,7 @@ class LiveCaptureRecognitionInstrumentedTest {
                 // OCR already submitted to the platform may finish after its capture engine closes.
                 SystemClock.sleep(1_000)
                 lifecycle.put("afterClose", observeStandby())
-                playFixture(playbackSource)
+                playFixture(playbackSource, hidesHeaderText)
                 clickOverlayControl("startRecognitionIcon")
                 await("The icon did not resume the existing screen-sharing session", 15_000) {
                     CaptureService.currentState == CaptureService.SessionState.RUNNING && CaptureService.latestSnapshot != null
@@ -350,6 +393,7 @@ class LiveCaptureRecognitionInstrumentedTest {
             }
             assertEquals("Playback must leave the source movie intact", sourceLength, source.length())
             assertEquals("Playback must not rewrite the source movie", sourceModified, source.lastModified())
+            lifecycle.put("completeSession", liveReport(source, expected, trace, mode, hidesAfterDrawing))
             context.startService(Intent(context, CaptureService::class.java).setAction(CaptureService.ACTION_STOP))
             await("Full stop did not release screen sharing", 15_000) {
                 CaptureService.currentState == CaptureService.SessionState.STOPPED && !CaptureService.isOverlayVisible
@@ -421,10 +465,11 @@ class LiveCaptureRecognitionInstrumentedTest {
         }
     }
 
-    private fun playFixture(source: File) {
+    private fun playFixture(source: File, hidesHeaderText: Boolean) {
         context.startActivity(
             Intent().setClassName(instrumentation.context.packageName, FixtureVideoActivity::class.java.name)
                 .putExtra("video", source.absolutePath)
+                .putExtra("hideHeaderText", hidesHeaderText)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),
         )
     }
@@ -515,46 +560,58 @@ class LiveCaptureRecognitionInstrumentedTest {
         assertTrue("The Glyph canvas must stay available while drawing", overlayControl("glyphDiagram")?.isVisibleToUser == true)
     }
 
-    private fun observeDrawingCompletion(
+    private fun observeMapReturn(
         input: GlyphDisplaySnapshot,
         trace: LiveTrace,
         reportName: String,
     ): JSONObject {
+        val measurements = RoundMeasurements()
+        val before = PowerMeter.shared.snapshot()
+        val headerRequestsBefore = before.total(PowerMetric.HEADER_IN_HACK).count +
+            before.total(PowerMetric.HEADER_OUTSIDE).count
         val started = SystemClock.elapsedRealtime()
-        val deadline = started + 14_000
-        var completion: GlyphDisplaySnapshot? = null
+        val deadline = started + 18_000
+        var map: GlyphDisplaySnapshot? = null
         while (SystemClock.elapsedRealtime() < deadline) {
-            // Accessibility retrieval can span the frame that completes drawing and removes the window.
+            // Accessibility retrieval can span the frame that detects a map icon and removes the window.
             val canvasVisible = CaptureService.isOverlayVisible &&
                 overlayControl("glyphDiagram")?.isVisibleToUser == true
             val snapshot = requireNotNull(CaptureService.latestSnapshot)
             trace.observe(snapshot)
             assertEquals("Automatic hiding must not restart capture", input.captureSessionID, snapshot.captureSessionID)
-            assertEquals("Completion must come from the first playback of this round", input.hackID, snapshot.hackID)
-            assertEquals("Recognition must keep running through drawing completion", CaptureService.SessionState.RUNNING, CaptureService.currentState)
+            assertEquals("Map return must come from the first playback of this round", input.hackID, snapshot.hackID)
+            assertEquals("Recognition must keep running through map return", CaptureService.SessionState.RUNNING, CaptureService.currentState)
             assertTrue("Recognition must stay active after drawing", CaptureService.isRecognizing)
-            if (snapshot.state == TrackingState.COMPLETED) {
+            if (snapshot.hasMapControl) {
                 assertEquals(CaptureLiveness.LIVE, snapshot.liveness)
-                assertEquals(PhaseSource.HEADER_TEXT, snapshot.phaseSource)
                 assertEquals("Drawing must not rewrite the recognized sequence", input.slots, snapshot.slots)
-                completion = snapshot
+                map = snapshot
                 break
             }
-            assertTrue("The result must not hide before genuine completion evidence", canvasVisible)
+            assertTrue("Completion text and result panels must not hide the result before a map icon appears", canvasVisible)
             SystemClock.sleep(20)
         }
-        val completed = completion ?: throw AssertionError("The recording did not provide a genuine COMPLETED phase before its next loop")
-        await("Completed drawing must automatically hide every floating surface", 3_000) {
+        val mapSnapshot = map ?: throw AssertionError("The recording did not provide a map-control observation before its next loop")
+        val mapMeasurements = measurements.finish()
+        val after = PowerMeter.shared.snapshot()
+        val headerRequestsAfter = after.total(PowerMetric.HEADER_IN_HACK).count +
+            after.total(PowerMetric.HEADER_OUTSIDE).count
+        assertEquals("Stable input through map return must submit no header OCR",
+            headerRequestsBefore, headerRequestsAfter)
+        await("A detected map icon must automatically hide every floating surface", 3_000) {
             !CaptureService.isOverlayVisible && overlayControl("glyphDiagram") == null &&
                 overlayControl("startRecognitionIcon") == null
         }
-        val screenshotName = "$reportName-completed-hidden.png"
+        val screenshotName = "$reportName-map-hidden.png"
         saveLiveScreenshot(screenshotName)
-        val hidden = observeHiddenSession(completed, durationMillis = 1_000)
+        val hidden = observeHiddenSession(mapSnapshot, durationMillis = 750)
         return JSONObject().apply {
             put("elapsedAfterInputCheckMillis", SystemClock.elapsedRealtime() - started)
-            put("completion", snapshotJson(completed))
-            put("hiddenAfterCompletion", hidden)
+            put("mapSnapshot", snapshotJson(mapSnapshot))
+            put("mapTransitionMeasurements", mapMeasurements)
+            put("headerRequestsBefore", headerRequestsBefore)
+            put("headerRequestsAfter", headerRequestsAfter)
+            put("hiddenOnMap", hidden)
             put("screenshot", screenshotName)
             put("sameCaptureSession", true)
             put("recognitionContinues", true)
@@ -638,9 +695,10 @@ class LiveCaptureRecognitionInstrumentedTest {
         }
     }
 
-    private fun showFromNotification(reportName: String) {
+    private fun showFromNotification(reportName: String, expectsVisible: Boolean = true) {
         val label = context.getString(R.string.notification_show_overlay)
         val title = context.getString(R.string.notification_title)
+        val frameBeforeNotification = CaptureService.latestSnapshot?.sourceFrameTime ?: 0.0
         runShell("cmd statusbar expand-notifications")
         var expandRequests = 0
         var nextExpandAt = 0L
@@ -702,8 +760,12 @@ class LiveCaptureRecognitionInstrumentedTest {
         } finally {
             runShell("cmd statusbar collapse")
         }
-        await("The actual notification action did not show the panel", 5_000) {
-            CaptureService.isOverlayVisible && overlayControl("glyphDiagram") != null && overlayControl("startRecognitionIcon") == null
+        await("The actual notification action did not respect map auto-hiding", 5_000) {
+            val current = CaptureService.latestSnapshot
+            val currentMapFrame = expectsVisible || current != null && current.hasMapControl &&
+                current.sourceFrameTime > frameBeforeNotification
+            currentMapFrame && CaptureService.isOverlayVisible == expectsVisible &&
+                (overlayControl("glyphDiagram") != null) == expectsVisible && overlayControl("startRecognitionIcon") == null
         }
     }
 
@@ -772,16 +834,36 @@ class LiveCaptureRecognitionInstrumentedTest {
         automaticPopup: JSONObject? = null,
     ): AcceptedSession {
         val measurements = RoundMeasurements()
+        val expectsAmbiguousPrefix = fileName == "real-recording-124013.mp4"
         val predictions = mutableMapOf<Int, GlyphDisplaySnapshot>()
         var frozen: GlyphDisplaySnapshot? = null
         var frozenAt = 0L
         var last: GlyphDisplaySnapshot? = null
         var nextRoundStarted = false
+        var observedGlyphPhase = false
         var nextRoundHidden = previousRound == null || !CaptureService.isOverlayVisible
         val startedAt = SystemClock.elapsedRealtime()
-        val deadline = startedAt + 40_000
+        val deadline = startedAt + if (expectsAmbiguousPrefix) 24_000 else 40_000
         while (SystemClock.elapsedRealtime() < deadline) {
             val snapshot = CaptureService.latestSnapshot
+            if (snapshot != null && (previousRound == null || snapshot.hackID > previousRound.hackID)) {
+                if (snapshot.state == TrackingState.COMMAND || snapshot.state == TrackingState.PRESENTING ||
+                    snapshot.outlook.observed.isNotEmpty()
+                ) {
+                    observedGlyphPhase = true
+                }
+                if (reportsMapControls && observedGlyphPhase && snapshot.hasMapControl) {
+                    val evidenceName = "${fileName.removeSuffix(".mp4")}-unexpected-map-${snapshot.hackID}-${SystemClock.elapsedRealtime()}"
+                    saveLiveScreenshot("$evidenceName.png")
+                    File(context.getExternalFilesDir(null), "live-capture-tests/$evidenceName.json")
+                        .writeText(snapshotJson(snapshot).apply {
+                            put("sourceFile", fileName)
+                            put("elapsedMillis", SystemClock.elapsedRealtime() - startedAt)
+                            put("screenshot", "$evidenceName.png")
+                        }.toString(2))
+                    throw AssertionError("Map control falsely detected during the fixture's Glyph phase before stable input: $evidenceName")
+                }
+            }
             if (previousRound != null && hidesAfterDrawing && !CaptureService.isOverlayVisible) nextRoundHidden = true
             if (automaticPopup != null && !automaticPopup.has("hackID") && CaptureService.isOverlayVisible &&
                 (previousRound == null || snapshot != null && snapshot.hackID > previousRound.hackID) &&
@@ -790,10 +872,22 @@ class LiveCaptureRecognitionInstrumentedTest {
                 val shown = requireNotNull(snapshot)
                 assertTrue("An automatic popup must show the requested new round",
                     previousRound == null || shown.hackID > previousRound.hackID)
-                assertEquals("The automatic popup must appear during prediction", TrackingState.PRESENTING, shown.state)
-                assertEquals("The automatic popup must have a unique prediction", PredictionState.RESOLVED, shown.outlook.state)
-                assertTrue("The automatic popup must use a confirmed prefix and a remaining prediction",
-                    shown.outlook.observed.isNotEmpty() && shown.outlook.predictedSuffix.isNotEmpty())
+                if (expectsAmbiguousPrefix) {
+                    assertTrue("An ambiguous prefix must wait for all three Glyphs before showing the result",
+                        shown.state == TrackingState.PRESENTING || shown.state == TrackingState.INPUT)
+                    assertEquals(expected, shown.slots.map { it.glyph?.name })
+                    assertTrue("The popup must contain three actual confirmations, not an inferred final Glyph",
+                        shown.slots.all { it.status == SlotObservation.Status.CONFIRMED })
+                    assertEquals(expected, shown.outlook.observed.map { it.name })
+                    assertTrue(shown.outlook.predictedSuffix.isEmpty())
+                    assertEquals(PredictionState.RESOLVED, shown.outlook.state)
+                    assertEquals(1, shown.outlook.candidateCount)
+                } else {
+                    assertEquals("The automatic popup must appear during prediction", TrackingState.PRESENTING, shown.state)
+                    assertEquals("The automatic popup must have a unique prediction", PredictionState.RESOLVED, shown.outlook.state)
+                    assertTrue("The automatic popup must use a confirmed prefix and a remaining prediction",
+                        shown.outlook.observed.isNotEmpty() && shown.outlook.predictedSuffix.isNotEmpty())
+                }
                 assertEquals("The automatic popup must complete this recording's entire sequence", expected,
                     (shown.outlook.observed + shown.outlook.predictedSuffix).map { it.name })
                 assertEquals(expected.size, shown.expectedSlotCount)
@@ -803,6 +897,7 @@ class LiveCaptureRecognitionInstrumentedTest {
                 automaticPopup.put("elapsedMillis", SystemClock.elapsedRealtime() - startedAt)
                 automaticPopup.put("confirmedPrefix", JSONArray(shown.outlook.observed.map { it.name }))
                 automaticPopup.put("predictedSuffix", JSONArray(shown.outlook.predictedSuffix.map { it.name }))
+                automaticPopup.put("showedAfterAllGlyphsConfirmed", expectsAmbiguousPrefix)
                 recordPopupPlacement(shown, automaticPopup)
                 if (hidesAfterDrawing) {
                     assertControlsHidden()
@@ -829,8 +924,18 @@ class LiveCaptureRecognitionInstrumentedTest {
                     isNextRound &&
                     outlook.observed.map { it.name } == expected.take(2)
                 ) {
-                    assertEquals(PredictionState.RESOLVED, outlook.state)
-                    assertEquals(expected.drop(2), outlook.predictedSuffix.map { it.name })
+                    if (expectsAmbiguousPrefix) {
+                        assertEquals(PredictionState.AMBIGUOUS, outlook.state)
+                        assertEquals(2, outlook.candidateCount)
+                        assertEquals(setOf(
+                            listOf("advance", "human", "enlightenment"),
+                            listOf("advance", "human", "resistance"),
+                        ), outlook.candidates.map { candidate -> candidate.glyphs.map { it.name } }.toSet())
+                        assertTrue("Two valid final Glyphs must not produce a unique suffix", outlook.predictedSuffix.isEmpty())
+                    } else {
+                        assertEquals(PredictionState.RESOLVED, outlook.state)
+                        assertEquals(expected.drop(2), outlook.predictedSuffix.map { it.name })
+                    }
                     assertEquals(expected.size, snapshot.expectedSlotCount)
                     assertTrue(snapshot.slots.take(2).all { it.status == SlotObservation.Status.CONFIRMED })
                     if (predictions.put(snapshot.hackID, snapshot) == null) {
@@ -843,7 +948,7 @@ class LiveCaptureRecognitionInstrumentedTest {
                 ) {
                     if (previousRound != null) assertTrue("A new round must be observed presenting before its first input", nextRoundStarted)
                     if (automaticPopup != null) assertTrue("Prediction must have automatically shown the hidden panel", automaticPopup.has("hackID"))
-                    assertTrue("First input must have predicted from its confirmed first two slots", snapshot.hackID in predictions)
+                    assertTrue("First input must have verified the prediction state of its confirmed first two slots", snapshot.hackID in predictions)
                     assertEquals("First input must contain the complete recorded sequence", expected, snapshot.slots.map { it.glyph?.name })
                     assertTrue("Every slot must be confirmed at first input", snapshot.slots.all { it.status == SlotObservation.Status.CONFIRMED })
                     assertTrue("First input must freeze the expected sequence", snapshot.isFrozen)
@@ -912,7 +1017,7 @@ class LiveCaptureRecognitionInstrumentedTest {
     }
 
     /** Counts published source frames, not the tracker's private shape hypotheses. */
-    private class LiveTrace {
+    private class LiveTrace(private val includesMapControls: Boolean = true) {
         val startedAtEpochMillis = System.currentTimeMillis()
         val startedAtUptimeMillis = SystemClock.elapsedRealtime()
         val predictedHackIDs = mutableSetOf<Int>()
@@ -927,6 +1032,7 @@ class LiveCaptureRecognitionInstrumentedTest {
                 snapshot.indicatorsObstructed, snapshot.slotCountConflict, snapshot.provisionalGlyph,
                 snapshot.outlook.state, snapshot.outlook.observed, snapshot.outlook.predictedSuffix,
                 snapshot.slots.map { Triple(it.status, it.glyph, it.alternatives) },
+                if (includesMapControls) snapshot.hasMapControl else false,
             ).joinToString("|")
             val elapsed = SystemClock.elapsedRealtime() - startedAtUptimeMillis
             val previous = spans.lastOrNull()
@@ -999,6 +1105,11 @@ class LiveCaptureRecognitionInstrumentedTest {
                 put("confirmedSequence", JSONArray(it.input.slots.map { slot -> slot.glyph?.name }))
                 put("observedPrefixAtPrediction", JSONArray(it.prediction.outlook.observed.map { glyph -> glyph.name }))
                 put("predictedSuffix", JSONArray(it.prediction.outlook.predictedSuffix.map { glyph -> glyph.name }))
+                put("prefixPredictionSnapshot", snapshotJson(it.prediction).apply {
+                    put("candidateSequences", JSONArray(it.prediction.outlook.candidates.map { candidate ->
+                        JSONArray(candidate.glyphs.map { glyph -> glyph.name })
+                    }))
+                })
                 put("inputFreeze", it.input.isFrozen)
                 put("roundMeasurements", it.measurements)
             }
@@ -1023,6 +1134,7 @@ class LiveCaptureRecognitionInstrumentedTest {
         put("arrivalUptime", snapshot.evidenceArrivalUptime)
         put("state", snapshot.state.name)
         put("phaseSource", snapshot.phaseSource.name)
+        if (reportsMapControls) put("hasMapControl", snapshot.hasMapControl)
         put("liveness", snapshot.liveness.name)
         put("expectedSlotCount", snapshot.expectedSlotCount ?: JSONObject.NULL)
         put("currentSlotIndex", snapshot.currentSlotIndex ?: JSONObject.NULL)

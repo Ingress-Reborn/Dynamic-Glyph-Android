@@ -175,117 +175,84 @@ class RealtimeOverlayVisibilityTest {
     }
 
     @Test
-    fun drawingCompletionHidesOnlyAfterTheSameRoundReachedInput() {
+    fun mapControlsHideBeforeAnyHackOrInput() {
+        for (state in TrackingState.entries) {
+            val visibility = RealtimeOverlayVisibility()
+            val map = snapshot(hackID = 0, state = state, hasMapControl = true)
+            visibility.show()
+            assertTrue(visibility.observe(map, hidesAfterDrawing = true))
+            assertFalse(visibility.wantsWindow)
+        }
+    }
+
+    @Test
+    fun disabledAutoHideKeepsTheWindowVisibleOnTheMap() {
         val visibility = RealtimeOverlayVisibility()
-        val input = snapshot(confirmedCount = 5, state = TrackingState.INPUT, phaseSource = PhaseSource.INPUT_TIMER)
-        val completed = snapshot(confirmedCount = 5, state = TrackingState.COMPLETED)
         visibility.show()
-
-        assertFalse(visibility.observe(completed, hidesAfterDrawing = true))
-        assertTrue(visibility.wantsWindow)
-        assertFalse(visibility.observe(input, hidesAfterDrawing = true))
-        assertTrue(visibility.wantsWindow)
-        assertTrue(visibility.observe(completed, hidesAfterDrawing = true))
-        assertFalse(visibility.wantsWindow)
-        assertEquals(sequence, completed.outlook.observed)
-        assertEquals(input.slots, completed.slots)
-    }
-
-    @Test
-    fun disabledAutoHideKeepsCompletedResultsVisible() {
-        val visibility = RealtimeOverlayVisibility()
-        assertTrue(visibility.observe(snapshot(state = TrackingState.INPUT)))
-
-        assertFalse(visibility.observe(snapshot(state = TrackingState.COMPLETED)))
+        assertFalse(visibility.observe(snapshot(hasMapControl = true)))
         assertTrue(visibility.wantsWindow)
     }
 
     @Test
-    fun staleRetainedAndInterruptedEvidenceCannotHideTheDrawingWindow() {
+    fun completionHeadersAndInputChangesDoNotHideWithoutAMapControl() {
         val visibility = RealtimeOverlayVisibility()
         assertTrue(visibility.observe(snapshot(state = TrackingState.INPUT), hidesAfterDrawing = true))
+        for (state in listOf(TrackingState.INPUT, TrackingState.COMPLETED, TrackingState.INTERRUPTED)) {
+            assertFalse(visibility.observe(snapshot(state = state), hidesAfterDrawing = true))
+            assertTrue(visibility.wantsWindow)
+        }
+    }
+
+    @Test
+    fun onlyFreshLiveMapPixelsCanHideTheWindow() {
+        val visibility = RealtimeOverlayVisibility()
+        visibility.show()
         val cases = listOf(
-            snapshot(state = TrackingState.INPUT, phaseSource = PhaseSource.RETAINED),
-            snapshot(state = TrackingState.INTERRUPTED, phaseSource = PhaseSource.NONE),
-            snapshot(state = TrackingState.COMPLETED, phaseSource = PhaseSource.RETAINED),
-            snapshot(state = TrackingState.COMPLETED, liveness = CaptureLiveness.INTERRUPTED),
-            snapshot(state = TrackingState.COMPLETED, acceptance = AcceptanceMode.ProvisionalOnly("interrupted")),
-            snapshot(hackID = 2, state = TrackingState.COMPLETED),
+            snapshot(hasMapControl = true, liveness = CaptureLiveness.INTERRUPTED),
+            snapshot(hasMapControl = true, liveness = CaptureLiveness.STOPPED),
+            snapshot(hasMapControl = true, acceptance = AcceptanceMode.ProvisionalOnly("interrupted")),
         )
-        for (snapshot in cases) {
-            assertFalse(visibility.observe(snapshot, hidesAfterDrawing = true))
+        for (map in cases) {
+            assertFalse(visibility.observe(map, hidesAfterDrawing = true))
             assertTrue(visibility.wantsWindow)
         }
-        assertFalse(visibility.observe(snapshot(state = TrackingState.COMPLETED), uptime = 12.0, hidesAfterDrawing = true))
+        val map = snapshot(hasMapControl = true)
+        assertFalse(visibility.observe(map, uptime = 12.0, hidesAfterDrawing = true))
         assertTrue(visibility.wantsWindow)
-        assertTrue(visibility.observe(snapshot(state = TrackingState.COMPLETED), hidesAfterDrawing = true))
+        assertTrue(visibility.observe(map, hidesAfterDrawing = true))
         assertFalse(visibility.wantsWindow)
     }
 
     @Test
-    fun retainedInputDoesNotArmCompletionHiding() {
+    fun returningToMapConsumesTheOldRoundEvenBeforeItsPredictionWasReady() {
         val visibility = RealtimeOverlayVisibility()
-        val retainedInput = snapshot(state = TrackingState.INPUT, phaseSource = PhaseSource.RETAINED)
         visibility.show()
-        assertFalse(visibility.observe(retainedInput, hidesAfterDrawing = true))
-        assertFalse(visibility.observe(snapshot(state = TrackingState.COMPLETED), hidesAfterDrawing = true))
-        assertTrue(visibility.wantsWindow)
-    }
-
-    @Test
-    fun aCompletedRoundDoesNotImmediatelyHideAManuallyReopenedWindow() {
-        val visibility = RealtimeOverlayVisibility()
-        assertTrue(visibility.observe(snapshot(state = TrackingState.INPUT), hidesAfterDrawing = true))
-        val completed = snapshot(state = TrackingState.COMPLETED)
-        assertTrue(visibility.observe(completed, hidesAfterDrawing = true))
-
-        visibility.show()
-        repeat(3) {
-            assertFalse(visibility.observe(completed, hidesAfterDrawing = true))
-            assertTrue(visibility.wantsWindow)
-        }
-        val command = snapshot(state = TrackingState.COMMAND)
-        assertTrue(visibility.observe(command, hidesAfterDrawing = true))
-        assertFalse(visibility.wantsWindow)
-        visibility.show()
-        assertFalse(visibility.observe(command, hidesAfterDrawing = true))
-        assertTrue(visibility.wantsWindow)
-    }
-
-    @Test
-    fun aNewPresentationClearsTheOldResultWhenTheCompletionTitleWasMissed() {
-        val visibility = RealtimeOverlayVisibility()
-        assertTrue(visibility.observe(snapshot(state = TrackingState.INPUT), hidesAfterDrawing = true))
-        assertFalse(visibility.observe(snapshot(state = TrackingState.INTERRUPTED), hidesAfterDrawing = true))
-        assertTrue(visibility.wantsWindow)
-
-        assertTrue(visibility.observe(snapshot(hackID = 2, confirmedCount = 1), hidesAfterDrawing = true))
+        assertTrue(visibility.observe(snapshot(confirmedCount = 1, hasMapControl = true), hidesAfterDrawing = true))
+        assertFalse(visibility.observe(snapshot(), hidesAfterDrawing = true))
         assertFalse(visibility.wantsWindow)
         assertTrue(visibility.observe(snapshot(hackID = 2), hidesAfterDrawing = true))
         assertTrue(visibility.wantsWindow)
-        assertFalse(visibility.observe(snapshot(hackID = 2), hidesAfterDrawing = true))
     }
 
     @Test
-    fun resetClearsInputAndCompletionHistory() {
+    fun manuallyShowingOnTheMapHidesAgainWhileTheOptionIsEnabled() {
         val visibility = RealtimeOverlayVisibility()
-        assertTrue(visibility.observe(snapshot(state = TrackingState.INPUT), hidesAfterDrawing = true))
-        assertTrue(visibility.observe(snapshot(state = TrackingState.COMPLETED), hidesAfterDrawing = true))
+        val map = snapshot(hasMapControl = true)
+        repeat(3) {
+            visibility.show()
+            assertTrue(visibility.observe(map, hidesAfterDrawing = true))
+            assertFalse(visibility.wantsWindow)
+            assertFalse(visibility.observe(map, hidesAfterDrawing = true))
+        }
+    }
+
+    @Test
+    fun resetClearsTheRoundConsumedByMapHiding() {
+        val visibility = RealtimeOverlayVisibility()
+        visibility.observe(snapshot(hasMapControl = true), hidesAfterDrawing = true)
+        assertFalse(visibility.observe(snapshot(), hidesAfterDrawing = true))
         visibility.reset()
-        visibility.show()
-        assertFalse(visibility.observe(snapshot(state = TrackingState.COMPLETED), hidesAfterDrawing = true))
-        assertTrue(visibility.wantsWindow)
-    }
-
-    @Test
-    fun clearingTheOldWindowDoesNotConsumeAnAlreadyReadyNextRound() {
-        val visibility = RealtimeOverlayVisibility()
-        assertTrue(visibility.observe(snapshot(state = TrackingState.INPUT), hidesAfterDrawing = true))
-        val nextRound = snapshot(hackID = 2)
-
-        assertTrue(visibility.observe(nextRound, hidesAfterDrawing = true))
-        assertFalse(visibility.wantsWindow)
-        assertTrue(visibility.observe(nextRound, hidesAfterDrawing = true))
+        assertTrue(visibility.observe(snapshot(), hidesAfterDrawing = true))
         assertTrue(visibility.wantsWindow)
     }
 
@@ -309,7 +276,9 @@ class RealtimeOverlayVisibilityTest {
         slotCountConflict: Boolean = false,
         indicatorsObstructed: Boolean = false,
         slotOverrides: Map<Int, SlotObservation.Status> = emptyMap(),
+        hasMapControl: Boolean = false,
     ): GlyphDisplaySnapshot = GlyphDisplaySnapshot(
+        hasMapControl = hasMapControl,
         captureSessionID = CaptureSessionID(1UL),
         hackID = hackID,
         revision = 1,

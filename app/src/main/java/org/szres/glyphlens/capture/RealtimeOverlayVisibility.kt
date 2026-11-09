@@ -2,7 +2,6 @@ package org.szres.glyphlens.capture
 
 import org.szres.glyphlens.recognition.CaptureLiveness
 import org.szres.glyphlens.recognition.GlyphDisplaySnapshot
-import org.szres.glyphlens.recognition.PhaseSource
 import org.szres.glyphlens.recognition.PredictionState
 import org.szres.glyphlens.recognition.SlotObservation
 import org.szres.glyphlens.recognition.TrackingState
@@ -13,16 +12,10 @@ internal class RealtimeOverlayVisibility {
         private set
 
     private var lastReadyHackID = 0
-    private var lastInputHackID = 0
-    private var lastCompletedHackID = 0
-    private var lastClearedInputHackID = 0
 
     fun reset() {
         wantsWindow = false
         lastReadyHackID = 0
-        lastInputHackID = 0
-        lastCompletedHackID = 0
-        lastClearedInputHackID = 0
     }
 
     fun show() {
@@ -39,36 +32,17 @@ internal class RealtimeOverlayVisibility {
         uptime: Double = snapshot.evidenceArrivalUptime,
         hidesAfterDrawing: Boolean = false,
     ): Boolean {
-        if (snapshot.hackID <= 0 || snapshot.liveness != CaptureLiveness.LIVE ||
+        if (snapshot.liveness != CaptureLiveness.LIVE ||
             !snapshot.acceptance.isTracking || snapshot.isStale(uptime, threshold = 1.5)
         ) return false
-        if (snapshot.state == TrackingState.INPUT &&
-            (snapshot.phaseSource == PhaseSource.HEADER_TEXT || snapshot.phaseSource == PhaseSource.INPUT_TIMER)
-        ) lastInputHackID = snapshot.hackID
-        if (hidesAfterDrawing && shouldHideAfterDrawing(snapshot)) {
+        if (hidesAfterDrawing && snapshot.hasMapControl) {
             val changed = wantsWindow
             wantsWindow = false
+            if (snapshot.hackID > 0) lastReadyHackID = snapshot.hackID
             return changed
         }
         if (snapshot.hackID == lastReadyHackID || !isReady(snapshot)) return false
         return revealOnce(snapshot.hackID)
-    }
-
-    private fun shouldHideAfterDrawing(snapshot: GlyphDisplaySnapshot): Boolean {
-        if (snapshot.hackID == lastInputHackID && snapshot.hackID != lastCompletedHackID &&
-            snapshot.state == TrackingState.COMPLETED && snapshot.phaseSource == PhaseSource.HEADER_TEXT
-        ) {
-            lastCompletedHackID = snapshot.hackID
-            return true
-        }
-        // A missed completion title must not leave the previous result covering the next presentation.
-        val startsNextRound = snapshot.state == TrackingState.COMMAND && snapshot.phaseSource == PhaseSource.HEADER_TEXT ||
-            snapshot.state == TrackingState.PRESENTING && snapshot.hackID > lastInputHackID
-        if (lastInputHackID > 0 && lastInputHackID != lastClearedInputHackID && startsNextRound) {
-            lastClearedInputHackID = lastInputHackID
-            return true
-        }
-        return false
     }
 
     private fun revealOnce(hackID: Int): Boolean {

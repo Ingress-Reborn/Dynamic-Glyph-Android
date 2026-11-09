@@ -54,41 +54,57 @@ public final class ReleaseUiCaptureInstrumentedTest {
 
     @Test
     public void fiveGlyphReleaseJourneyProducesVisualEvidence() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, false, false);
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, false, false, false);
     }
 
     @Test
     public void threeGlyphReleaseJourneyProducesVisualEvidence() throws Throwable {
-        verifyJourney("real-recording-093906.mp4", new String[] {"nourish", "xm", "portal"}, false, false, false);
+        verifyJourney("real-recording-093906.mp4", new String[] {"nourish", "xm", "portal"}, false, false, false, false);
     }
 
     @Test
     public void powerSavingReleaseJourneyStartsAndResumesFromIcon() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, false, false);
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, false, false, false);
     }
 
     @Test
-    public void autoHideReleaseJourneyHidesAfterDrawingAndContinues() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, true, false);
+    public void autoHideReleaseJourneyHidesOnMapIconsAndContinues() throws Throwable {
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, true, false, false);
     }
 
     @Test
-    public void powerSavingAutoHideReleaseJourneyContinuesAfterDrawing() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, true, false);
+    public void powerSavingAutoHideReleaseJourneyContinuesAfterMapIcons() throws Throwable {
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, true, false, false);
     }
 
     @Test
     public void realtimeHiddenReleaseJourneyRevealsPredictionsAndRestoresFromNotification() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, false, true);
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, false, true, false);
+    }
+
+    @Test
+    public void realtimeMapIconsWorkWithoutTitlesAndWithWrongLanguage() throws Throwable {
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, true, false, true);
+    }
+
+    @Test
+    public void powerSavingMapIconsWorkWithoutTitlesAndWithWrongLanguage() throws Throwable {
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, true, false, true);
+    }
+
+    @Test
+    public void newThreeGlyphReleaseJourneyHidesOnMapIconsAndContinues() throws Throwable {
+        verifyJourney("real-recording-124013.mp4", new String[] {"advance", "human", "enlightenment"}, false, true, false, false);
     }
 
     private void verifyJourney(String fileName, String[] expectedSequence, boolean powerSaving,
-            boolean autoHide, boolean hiddenJourney) throws Throwable {
+            boolean autoHide, boolean hiddenJourney, boolean hideHeaderText) throws Throwable {
         File source = new File(context.getExternalFilesDir(null), fileName);
         File output = new File(context.getExternalFilesDir(null), "live-release-tests/"
                 + fileName.replace(".mp4", "") + (powerSaving ? "-power-saving" : "-realtime")
                 + (autoHide ? "-auto-hide" : "")
                 + (hiddenJourney ? "-hidden" : "")
+                + (hideHeaderText ? "-masked-title-english" : "")
                 + "-" + System.currentTimeMillis());
         assertTrue("Cannot create visual evidence directory", output.mkdirs());
         JSONObject report = new JSONObject();
@@ -101,6 +117,10 @@ public final class ReleaseUiCaptureInstrumentedTest {
         report.put("startsWithHiddenWindow", !powerSaving || autoHide);
         report.put("playerProcess", instrumentation.getContext().getPackageName() + ":fixture_video");
         report.put("languageAtStart", languagePreferences());
+        report.put("headerTextMasked", hideHeaderText);
+        SharedPreferences preferences = context.getSharedPreferences("glyph-lens", Context.MODE_PRIVATE);
+        String previousChosenLanguage = preferences.getString("game.language", null);
+        String previousRememberedLanguage = preferences.getString("game.detectedLanguage", null);
         AccessibilityServiceInfo serviceInfo = automation.getServiceInfo();
         int previousFlags = serviceInfo.flags;
         serviceInfo.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -112,6 +132,10 @@ public final class ReleaseUiCaptureInstrumentedTest {
         Boolean previousPowerSaving = null;
         Boolean previousAutoHide = null;
         try {
+            if (hideHeaderText) {
+                assertTrue("Cannot select the deliberately mismatched OCR language", preferences.edit()
+                        .putString("game.language", "en").remove("game.detectedLanguage").commit());
+            }
             report.put("mlKitRegistrarConstructors", verifyMlKitRegistrars());
             File playbackSource = fixtureForPlayer(source);
             assertTrue("Grant display-over-other-apps before this test", Settings.canDrawOverlays(context));
@@ -130,6 +154,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
             selectAutoHide(autoHide);
             saveScreenshot(new File(output, "home-mode.png"));
             report.put("homeModeScreenshot", "home-mode.png");
+            report.put("languageDuringCapture", languagePreferences());
             requestedCapture = true;
             click(awaitNode("primaryButton", 5_000));
             grantWholeScreenProjection();
@@ -141,7 +166,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 observeHidden(output, "before-playback-hidden", hidden);
             }
             playerStarted = true;
-            playFixture(playbackSource);
+            playFixture(playbackSource, hideHeaderText);
             if (powerSaving) {
                 JSONObject standby = new JSONObject();
                 report.put("initialStandby", standby);
@@ -149,9 +174,9 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 click(awaitNode("startRecognitionIcon", 5_000));
                 if (autoHide) awaitNoFloatingSurface();
                 else awaitRecognitionPanel();
-                playFixture(playbackSource);
+                playFixture(playbackSource, hideHeaderText);
             }
-            if (autoHide) observeAutoHideCycle(output, report);
+            if (autoHide) observeMapHideCycle(output, report, fileName);
             else observePhases(output, report, !powerSaving);
             if (powerSaving && !autoHide) {
                 click(awaitNode("closeOverlay", 5_000));
@@ -161,7 +186,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 click(awaitNode("startRecognitionIcon", 5_000));
                 awaitNode("dragHandle", 10_000);
                 assertNoProjectionConsent();
-                playFixture(playbackSource);
+                playFixture(playbackSource, hideHeaderText);
                 File resumedOutput = new File(output, "resumed");
                 assertTrue("Cannot create resumed visual evidence directory", resumedOutput.mkdirs());
                 JSONObject resumed = new JSONObject();
@@ -173,32 +198,26 @@ public final class ReleaseUiCaptureInstrumentedTest {
             }
             if (autoHide) {
                 assertNoProjectionConsent();
-                playFixture(playbackSource);
+                playFixture(playbackSource, hideHeaderText);
                 File nextOutput = new File(output, "next-round");
                 assertTrue("Cannot create next-round visual evidence directory", nextOutput.mkdirs());
                 JSONObject next = new JSONObject();
                 next.put("screenshotDirectory", "next-round");
                 next.put("glyphVerification", "Manual review of screenshots required; no per-Glyph assertion");
                 report.put("nextRound", next);
-                observeAutoHideCycle(nextOutput, next);
+                observeMapHideCycle(nextOutput, next, fileName);
                 report.put("nextRoundShownAndHiddenWithoutRestartOrConsent", true);
-                showFromNotification(output, "completed-round-notification", report);
-                awaitNode("glyphDiagram", 5_000);
-                long restoredAt = SystemClock.elapsedRealtime();
-                while (SystemClock.elapsedRealtime() - restoredAt < 2_000) {
-                    assertHeaderlessPanel();
-                    assertNoProjectionConsent();
-                    SystemClock.sleep(100);
-                }
-                saveScreenshot(new File(output, "restored-completed-round.png"));
-                report.put("manualShowAfterCompletionObservedMillis", SystemClock.elapsedRealtime() - restoredAt);
+                showFromNotification(output, "map-notification", report);
+                JSONObject hidden = new JSONObject();
+                report.put("mapStillHidesAfterNotification", hidden);
+                observeHidden(output, "map-after-notification", hidden, 750);
             }
             if (hiddenJourney) {
                 click(awaitNode("closeOverlay", 5_000));
                 JSONObject hidden = new JSONObject();
                 report.put("firstRoundDismissed", hidden);
                 observeHidden(output, "first-round-dismissed", hidden);
-                playFixture(playbackSource);
+                playFixture(playbackSource, hideHeaderText);
                 File nextOutput = new File(output, "next-round");
                 assertTrue("Cannot create next-round evidence directory", nextOutput.mkdirs());
                 JSONObject next = new JSONObject();
@@ -256,6 +275,10 @@ public final class ReleaseUiCaptureInstrumentedTest {
                     if (previousAutoHide != null) selectAutoHide(previousAutoHide);
                     if (previousPowerSaving != null) selectMode(previousPowerSaving);
                 } finally {
+                    if (hideHeaderText) {
+                        preferences.edit().putString("game.language", previousChosenLanguage)
+                                .putString("game.detectedLanguage", previousRememberedLanguage).commit();
+                    }
                     serviceInfo.flags = previousFlags;
                     automation.setServiceInfo(serviceInfo);
                 }
@@ -263,9 +286,10 @@ public final class ReleaseUiCaptureInstrumentedTest {
         }
     }
 
-    private void playFixture(File source) {
+    private void playFixture(File source, boolean hideHeaderText) {
         context.startActivity(new Intent().setClassName(instrumentation.getContext().getPackageName(), PLAYER)
-                .putExtra("video", source.getAbsolutePath()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                .putExtra("video", source.getAbsolutePath()).putExtra("hideHeaderText", hideHeaderText)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                         | Intent.FLAG_ACTIVITY_CLEAR_TASK));
         long deadline = SystemClock.elapsedRealtime() + 10_000;
         while (SystemClock.elapsedRealtime() < deadline) {
@@ -333,15 +357,6 @@ public final class ReleaseUiCaptureInstrumentedTest {
         assertNoProjectionConsent();
     }
 
-    private void assertHeaderlessPanel() {
-        AccessibilityNodeInfo diagram = findAppNode("glyphDiagram");
-        assertTrue("Automatic hiding must retain the Glyph canvas until the drawing finishes",
-                diagram != null && diagram.isVisibleToUser());
-        assertTrue("Automatic hiding must remove the entire top control row",
-                findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null);
-        assertTrue("An active automatic session must not show a standby icon", findAppNode("startRecognitionIcon") == null);
-    }
-
     private void stopSharing() {
         launchHome();
         AccessibilityNodeInfo primary = awaitNode("primaryButton", 10_000);
@@ -371,9 +386,13 @@ public final class ReleaseUiCaptureInstrumentedTest {
     }
 
     private void observeHidden(File output, String name, JSONObject report) throws Exception {
+        observeHidden(output, name, report, 3_000);
+    }
+
+    private void observeHidden(File output, String name, JSONObject report, long durationMillis) throws Exception {
         awaitNoFloatingSurface();
         long started = SystemClock.elapsedRealtime();
-        while (SystemClock.elapsedRealtime() - started < 3_000) {
+        while (SystemClock.elapsedRealtime() - started < durationMillis) {
             assertNoProjectionConsent();
             assertTrue("A dismissed realtime window must remain completely hidden in the same round",
                     findAppNode("glyphDiagram") == null && findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null
@@ -577,16 +596,21 @@ public final class ReleaseUiCaptureInstrumentedTest {
         throw new AssertionError("No complete presentation-to-input UI journey in the first playback; last=" + previousStatus);
     }
 
-    private void observeAutoHideCycle(File output, JSONObject report) throws Exception {
+    private void observeMapHideCycle(File output, JSONObject report, String fileName) throws Exception {
         JSONArray screenshots = new JSONArray();
         report.put("screenshots", screenshots);
-        report.put("completionVerification", "UI visibility timing and screenshots; game completion requires manual screenshot review");
+        report.put("mapControlVerification", "UI visibility timing and screenshots; review the independently visible map icons in automatic-hidden.png");
+        boolean newThreeGlyphMovie = "real-recording-124013.mp4".equals(fileName);
+        long revealDeadline = newThreeGlyphMovie ? 12_000 : 16_000;
+        long drawingScreenshotAt = newThreeGlyphMovie ? 13_000 : 17_000;
+        long earliestMapControlsAt = newThreeGlyphMovie ? 18_000 : 24_000;
+        long firstPlaybackDeadline = newThreeGlyphMovie ? 24_000 : 31_000;
         long startedAt = SystemClock.elapsedRealtime();
         long nextScreenshotAt = startedAt;
         long firstVisibleAt = -1;
         boolean savedInputScreenshot = false;
-        // This fixed movie enters input around 14s, draws through 21s, and loops after 33s.
-        while (SystemClock.elapsedRealtime() - startedAt < 30_000) {
+        // These bounds belong to the fixtures; completed-text pages precede the first actual map icons.
+        while (SystemClock.elapsedRealtime() - startedAt < firstPlaybackDeadline) {
             assertNoProjectionConsent();
             long now = SystemClock.elapsedRealtime();
             long elapsed = now - startedAt;
@@ -598,25 +622,25 @@ public final class ReleaseUiCaptureInstrumentedTest {
             if (visible) {
                 if (firstVisibleAt < 0) {
                     firstVisibleAt = now;
-                    assertTrue("The prediction canvas must appear before the input observation window", elapsed < 16_000);
+                    assertTrue("The prediction canvas must appear before the input observation window", elapsed < revealDeadline);
                     report.put("automaticRevealElapsedMillis", elapsed);
                     saveScreenshot(new File(output, "automatic-reveal.png"));
                 }
-                if (!savedInputScreenshot && elapsed >= 17_000) {
+                if (!savedInputScreenshot && elapsed >= drawingScreenshotAt) {
                     saveScreenshot(new File(output, "during-drawing.png"));
                     report.put("duringDrawingScreenshotElapsedMillis", elapsed);
                     savedInputScreenshot = true;
                 }
             } else if (firstVisibleAt >= 0) {
-                assertTrue("The canvas must not disappear at input entry or while the fixture is still drawing",
-                        elapsed >= 20_000 && savedInputScreenshot);
+                assertTrue("The canvas must remain through drawing and completion text until a map icon appears",
+                        elapsed >= earliestMapControlsAt && savedInputScreenshot);
                 report.put("automaticHideElapsedMillis", elapsed);
                 report.put("visibleDurationMillis", now - firstVisibleAt);
                 saveScreenshot(new File(output, "automatic-hidden.png"));
                 JSONObject hidden = new JSONObject();
                 report.put("afterAutomaticHide", hidden);
-                observeHidden(output, "after-automatic-hide", hidden);
-                report.put("completedWithinFirstPlayback", true);
+                observeHidden(output, "after-automatic-hide", hidden, 750);
+                report.put("mapHiddenWithinFirstPlayback", true);
                 report.put("elapsedMillis", SystemClock.elapsedRealtime() - startedAt);
                 return;
             }
@@ -629,7 +653,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
             }
             SystemClock.sleep(100);
         }
-        throw new AssertionError("No prediction canvas followed by automatic hiding within the first 30 seconds");
+        throw new AssertionError("No prediction canvas followed by map-icon hiding within the first playback");
     }
 
     private void launchHome() {

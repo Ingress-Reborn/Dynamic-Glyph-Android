@@ -20,6 +20,7 @@ import org.szres.glyphlens.recognition.image.GameUILayoutLocator
 import org.szres.glyphlens.recognition.image.GlyphFrameObservation
 import org.szres.glyphlens.recognition.image.GlyphFrameSession
 import org.szres.glyphlens.recognition.image.LumaGate
+import org.szres.glyphlens.recognition.image.MapControlReader
 import org.szres.glyphlens.recognition.image.NodeArrayDetection
 import org.szres.glyphlens.recognition.image.SlotStripReader
 import org.szres.glyphlens.recognition.image.toImageFrame
@@ -58,6 +59,8 @@ class GlyphCaptureEngine internal constructor(
     private val snapshots = PresentationSnapshotFactory(sequenceTable?.let(::SequencePredictor))
     private val pace = AnalysisRateController()
     private val gate = LumaGate()
+    private val mapControls = MapControlReader()
+    private var hasMapControl = false
     private val layoutLocator = GameUILayoutLocator()
     private var slotReader = SlotStripReader()
     private var lastSample = Double.NEGATIVE_INFINITY
@@ -103,7 +106,7 @@ class GlyphCaptureEngine internal constructor(
             val frame = captured.rgba
             val at = captured.sourceTimeSeconds
             val savesPower = powerSaving()
-            val inHack = isInHack(at)
+            val inHack = !hasMapControl && isInHack(at)
             val constrained = savesPower && power.isConstrained
             val decision = if (savesPower) {
                 pace.decide(at, if (inHack) null else gate.read(frame), busy = sawActivity, inHack = inHack, constrained = constrained)
@@ -125,6 +128,12 @@ class GlyphCaptureEngine internal constructor(
             val image = frame.toImageFrame(fullColor = true)
             val color = image.topBand.image
             meter.finish(PowerMetric.CONVERSION, conversionStarted)
+            hasMapControl = mapControls.read(color, at) != null
+            if (hasMapControl) {
+                sawActivity = false
+                latest = snapshot(observation = null, sourceTime = at)
+                return latest
+            }
             val retainedFit = frameSession?.retainCalibration(image.luminance, at)
             val slotStarted = meter.now()
             if (frameSession != null) {
@@ -175,7 +184,7 @@ class GlyphCaptureEngine internal constructor(
                 FrameEvidence.fromAnalysis(
                     sessionID = tracker.sessionID,
                     time = at,
-                    header = header.evidence.reading(at, tracker.sessionID),
+                    header = if (waitsForMapOrNextPresentation) null else header.evidence.reading(at, tracker.sessionID),
                     observation = observation,
                     slotResult = slotResult,
                     hasInputTimerBar = hasInputTimer,
@@ -194,6 +203,7 @@ class GlyphCaptureEngine internal constructor(
                 color = color,
                 session = tracker.sessionID,
                 readsHeader = frameSession != null && (!savesPower || headerInterval != null) &&
+                    !waitsForMapOrNextPresentation &&
                     !(tracker.state == TrackingState.INPUT && tracker.phaseSupportedByCurrentPixels),
                 inHack = inHack,
                 constrained = constrained,
@@ -216,6 +226,8 @@ class GlyphCaptureEngine internal constructor(
     private fun acceptCapture(captured: CapturedFrame): Boolean {
         val at = captured.sourceTimeSeconds
         if (captured.continuityBroken || at < lastPresentation) {
+            mapControls.reset()
+            hasMapControl = false
             layoutLocator.reset()
             fitFreshnessIsCurrentEpoch = false
             sawActivity = false
@@ -226,6 +238,8 @@ class GlyphCaptureEngine internal constructor(
         // A repeated source time does not provide new pixels or fresh phase evidence.
         if (captured.status == CaptureFrameStatus.IDLE) return false
         if (captured.status != CaptureFrameStatus.COMPLETE) {
+            mapControls.reset()
+            hasMapControl = false
             frameSession?.reset()
             sawActivity = false
             latest = snapshot(
@@ -237,6 +251,8 @@ class GlyphCaptureEngine internal constructor(
             return false
         }
         if (captured.rgba.width >= captured.rgba.height) {
+            mapControls.reset()
+            hasMapControl = false
             frameSession?.reset()
             sawActivity = false
             tracker.reset()
@@ -266,7 +282,12 @@ class GlyphCaptureEngine internal constructor(
         liveness = liveness,
         acceptance = acceptance,
         calibration = calibration,
+        hasMapControl = hasMapControl,
     )
+
+    private val waitsForMapOrNextPresentation: Boolean
+        get() = tracker.isFrozen && tracker.observedPresentationForCurrentHack &&
+            (tracker.state == TrackingState.INPUT || tracker.state == TrackingState.INTERRUPTED)
 
     private fun isInHack(at: Double): Boolean {
         val phaseAge = at - (tracker.lastPhaseTime ?: Double.NEGATIVE_INFINITY)

@@ -15,6 +15,6 @@
     <string name="notification_show_overlay">フローティングウィンドウを表示</string>
     <string name="notification_realtime_hidden_text">ウィンドウを隠して認識を続けています。結果は各ラウンドで一度だけ自動表示します。今すぐ開くには「フローティングウィンドウを表示」をタップしてください。</string>
     <string name="overlay_hide">フローティングウィンドウを隠す</string>
-    <string name="auto_hide_after_drawing">描画完了後に自動で隠す</string>
-    <string name="auto_hide_after_drawing_hint">ゲームが今回の描画完了を確認するとウィンドウを隠し、次のラウンドの認識を続けます。オンにすると上部の操作欄を隠します。通知からウィンドウを表示したり、認識を停止したりできます。</string>
+    <string name="auto_hide_after_drawing">マップに戻ったら自動で隠す</string>
+    <string name="auto_hide_after_drawing_hint">メインマップのいずれかのボタンを検出するとウィンドウを隠し、バックグラウンドで認識を続けます。オンにするとドラッグできる Glyph キャンバスだけを表示します。認識は通知から停止できます。</string>
 </resources>

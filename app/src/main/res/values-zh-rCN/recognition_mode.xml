@@ -15,6 +15,6 @@
     <string name="notification_show_overlay">显示悬浮窗</string>
     <string name="notification_realtime_hidden_text">窗口已隐藏，识别继续运行。结果就绪后每轮自动显示一次，也可点击显示悬浮窗。</string>
     <string name="overlay_hide">隐藏悬浮窗</string>
-    <string name="auto_hide_after_drawing">绘制完成后自动隐藏</string>
-    <string name="auto_hide_after_drawing_hint">游戏确认本轮绘制结束后隐藏窗口，并继续识别下一轮。开启后隐藏顶部控制行，可从通知栏显示窗口或停止识别。</string>
+    <string name="auto_hide_after_drawing">返回地图后自动隐藏</string>
+    <string name="auto_hide_after_drawing_hint">检测到主地图上的任一按钮时隐藏窗口，后台继续识别。开启后只保留可拖动的 Glyph 画布，可从通知栏停止识别。</string>
 </resources>

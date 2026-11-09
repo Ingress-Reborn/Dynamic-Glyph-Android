@@ -30,13 +30,21 @@ public final class ReleaseCaptureInstrumentation extends Instrumentation {
                 passed++;
             }
             if (journey == null || "autoHide".equals(journey)) {
-                journeys.autoHideReleaseJourneyHidesAfterDrawingAndContinues();
+                journeys.autoHideReleaseJourneyHidesOnMapIconsAndContinues();
                 passed++;
-                journeys.powerSavingAutoHideReleaseJourneyContinuesAfterDrawing();
+                journeys.powerSavingAutoHideReleaseJourneyContinuesAfterMapIcons();
                 passed++;
             }
             if (journey == null || "hidden".equals(journey)) {
                 journeys.realtimeHiddenReleaseJourneyRevealsPredictionsAndRestoresFromNotification();
+                passed++;
+            }
+            if (journey == null || "map".equals(journey)) {
+                journeys.realtimeMapIconsWorkWithoutTitlesAndWithWrongLanguage();
+                passed++;
+                journeys.powerSavingMapIconsWorkWithoutTitlesAndWithWrongLanguage();
+                passed++;
+                journeys.newThreeGlyphReleaseJourneyHidesOnMapIconsAndContinues();
                 passed++;
             }
             if (passed == 0) throw new IllegalArgumentException("Unknown journey: " + journey);

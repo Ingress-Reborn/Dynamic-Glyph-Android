@@ -2,13 +2,16 @@ package org.szres.glyphlens.test;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
+import android.graphics.Paint;
 import android.graphics.SurfaceTexture;
 import android.media.MediaPlayer;
 import android.os.Bundle;
 import android.view.Surface;
 import android.view.TextureView;
+import android.view.View;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import java.io.File;
@@ -21,6 +24,7 @@ public final class FixtureVideoActivity extends Activity implements TextureView.
     private MediaPlayer player;
     private String source;
     private TextureView textureView;
+    private View headerMask;
     private int videoWidth;
     private int videoHeight;
 
@@ -42,6 +46,23 @@ public final class FixtureVideoActivity extends Activity implements TextureView.
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.BLACK);
         root.addView(textureView);
+        headerMask = new View(this) {
+            private final Paint paint = new Paint();
+
+            @Override protected void onDraw(Canvas canvas) {
+                if (videoWidth <= 0 || videoHeight <= 0) return;
+                float scale = Math.min(getWidth() / (float) videoWidth, getHeight() / (float) videoHeight);
+                float contentWidth = videoWidth * scale;
+                float contentHeight = videoHeight * scale;
+                float left = (getWidth() - contentWidth) / 2;
+                float top = (getHeight() - contentHeight) / 2;
+                canvas.drawRect(left + contentWidth * 0.12f, top + contentHeight * 0.05f,
+                        left + contentWidth * 0.88f, top + contentHeight * 0.10f, paint);
+            }
+        };
+        root.addView(headerMask, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        headerMask.setVisibility(getIntent().getBooleanExtra("hideHeaderText", false) ? View.VISIBLE : View.GONE);
         setContentView(root);
     }
 
@@ -56,6 +77,7 @@ public final class FixtureVideoActivity extends Activity implements TextureView.
         }
         String nextSource = intent.getStringExtra("video");
         if (nextSource != null) source = nextSource;
+        headerMask.setVisibility(intent.getBooleanExtra("hideHeaderText", false) ? View.VISIBLE : View.GONE);
         if (player != null) {
             player.seekTo(0);
             player.start();
@@ -136,5 +158,6 @@ public final class FixtureVideoActivity extends Activity implements TextureView.
         Matrix transform = new Matrix();
         transform.setScale(scale * videoWidth / width, scale * videoHeight / height, width / 2, height / 2);
         textureView.setTransform(transform);
+        headerMask.invalidate();
     }
 }

@@ -100,6 +100,7 @@ class GlyphDisplaySnapshot(
     val provisionalExtensionCount: Int,
     val outlook: SequenceOutlook,
     val calibrationSummary: String,
+    val hasMapControl: Boolean = false,
 ) {
     fun age(atUptime: Double): Double =
         if (evidenceArrivalUptime > 0.0) maxOf(0.0, atUptime - evidenceArrivalUptime) else 0.0
@@ -155,7 +156,7 @@ class GlyphDisplaySnapshot(
         captureSessionID, hackID, revision, liveness, state, phaseSource, acceptance,
         sourceFrameTime, evidenceArrivalUptime, expectedSlotCount, slots, currentSlotIndex,
         inputSlotIndex, inputSlotObservedTime, indicatorsObstructed, slotCountConflict, isFrozen,
-        provisionalGlyph, provisionalExtensionCount, outlook, calibrationSummary,
+        provisionalGlyph, provisionalExtensionCount, outlook, calibrationSummary, hasMapControl,
     )
 
     override fun equals(other: Any?): Boolean =

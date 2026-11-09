@@ -15,6 +15,6 @@
     <string name="notification_show_overlay">Show floating window</string>
     <string name="notification_realtime_hidden_text">Recognition continues with the window hidden. Results appear once per round; tap Show floating window to open it now.</string>
     <string name="overlay_hide">Hide floating window</string>
-    <string name="auto_hide_after_drawing">Hide automatically after drawing</string>
-    <string name="auto_hide_after_drawing_hint">When the game confirms drawing is complete, hide the window and keep recognizing the next round. The top control row is hidden; use the notification to show the window or stop recognition.</string>
+    <string name="auto_hide_after_drawing">Hide automatically on return to map</string>
+    <string name="auto_hide_after_drawing_hint">When any main map button is detected, hide the window and keep recognizing in the background. When enabled, only the draggable Glyph canvas remains. Use the notification to stop recognition.</string>
 </resources>
