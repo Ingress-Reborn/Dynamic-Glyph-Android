@@ -6,6 +6,7 @@ import org.szres.glyphlens.recognition.schedule.GameTextSchedule.Request
 import org.szres.glyphlens.recognition.text.CaptureSessionID
 import org.szres.glyphlens.recognition.text.GameLanguage
 import org.szres.glyphlens.recognition.text.GameLanguageMemory
+import org.szres.glyphlens.recognition.text.GamePhase
 import org.szres.glyphlens.recognition.text.HeaderPhraseMatcher
 import org.szres.glyphlens.recognition.text.HeaderReading
 
@@ -142,11 +143,22 @@ class GameHeaderReader(private val configuration: Configuration = Configuration(
         }
     }
 
-    fun reading(frameTime: Double, session: CaptureSessionID): HeaderReading? = synchronized(lock) {
+    fun reading(
+        frameTime: Double,
+        session: CaptureSessionID,
+        completionSince: Double? = null,
+        completedMaximumAge: Double = configuration.maximumAge,
+    ): HeaderReading? = synchronized(lock) {
         val value = reading
         if (value == null || readingSession != session) return@synchronized null
+        val maximumAge = if (value.phase == GamePhase.completed && completionSince != null) {
+            if (value.sourceTime < completionSince) return@synchronized null
+            completedMaximumAge
+        } else {
+            configuration.maximumAge
+        }
         val age = frameTime - value.sourceTime
-        if (age >= 0 && age <= configuration.maximumAge) value else null
+        if (age >= 0 && age <= maximumAge) value else null
     }
 
     fun latestReading(session: CaptureSessionID): HeaderReading? = synchronized(lock) {

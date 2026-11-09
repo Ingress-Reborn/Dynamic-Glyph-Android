@@ -20,6 +20,7 @@ import org.szres.glyphlens.recognition.TileStyle
 import org.szres.glyphlens.recognition.TrackingEvent
 import org.szres.glyphlens.recognition.TrackingState
 import org.szres.glyphlens.recognition.image.SlotStripReading
+import org.szres.glyphlens.recognition.schedule.GameHeaderReader
 import org.szres.glyphlens.recognition.text.GamePhase
 import org.szres.glyphlens.recognition.text.HeaderReading
 import org.szres.glyphlens.recognition.tileStyles
@@ -626,6 +627,91 @@ class PresentationTrackerTests {
         delayed.hold(6, null, slots = 2, highlight = 0, glyph = "see")
         assertEquals(TrackingState.INTERRUPTED, delayed.tracker.state)
         assertTrue(delayed.tracker.confirmedPrefix.isEmpty())
+    }
+
+    @Test
+    fun delayedCompletionUsesExistingGraceWithoutChangingTheFrozenFiveGlyphs() {
+        for (delay in listOf(0.45, 0.75, 0.76)) {
+            val f = Feed()
+            val names = listOf("see", "advance", "truth", "all", "destiny")
+            names.forEachIndexed { index, name ->
+                f.hold(4, GamePhase.presenting, slots = 5, highlight = index, glyph = name)
+            }
+            f.step(null, slots = 5, highlight = 0, timerBar = true)
+            val frozen = f.tracker.slots
+            val hack = f.tracker.hackID
+            assertEquals(names, f.committed)
+            assertEquals(f.time, f.tracker.completionHeaderSince)
+            val sourceTime = f.time + 0.05
+            val completion = delayedCompletion(f, sourceTime, sourceTime + delay)
+            f.tracker.accept(FrameEvidence.fromAnalysis(f.session, sourceTime + delay, completion, observation = null))
+            if (delay <= f.tracker.policy.unknownPhaseGrace) {
+                assertEquals(TrackingState.COMPLETED, f.tracker.state)
+                assertEquals(PhaseSource.HEADER_TEXT, f.tracker.phaseSource)
+                assertEquals(sourceTime, completion?.sourceTime)
+                assertNull(f.tracker.completionHeaderSince)
+            } else {
+                assertNull(completion)
+                assertEquals(TrackingState.INTERRUPTED, f.tracker.state)
+            }
+            assertEquals(frozen, f.tracker.slots)
+            assertEquals(hack, f.tracker.hackID)
+        }
+    }
+
+    @Test
+    fun completionAllowanceSurvivesOnlyTheSameDrawingRound() {
+        val f = Feed()
+        f.hold(4, GamePhase.presenting, slots = 1, highlight = 0, glyph = "truth")
+        f.step(null, slots = 1, timerBar = true)
+        val started = f.time
+        f.step(null, slots = 1, timerBar = true)
+        assertEquals(started, f.tracker.completionHeaderSince)
+        f.step(null, after = 0.8, calibrated = false)
+        assertEquals(TrackingState.INTERRUPTED, f.tracker.state)
+        assertEquals(started, f.tracker.completionHeaderSince)
+        val sourceTime = f.time + 0.05
+        val completion = delayedCompletion(f, sourceTime, sourceTime + 0.45)
+        f.tracker.accept(FrameEvidence.fromAnalysis(f.session, sourceTime + 0.45, completion, observation = null))
+        assertEquals(TrackingState.COMPLETED, f.tracker.state)
+        assertEquals(PhaseSource.HEADER_TEXT, f.tracker.phaseSource)
+    }
+
+    @Test
+    fun completionAllowanceRequiresObservedPresentationAndEndsAtRoundOrClockReset() {
+        val late = Feed()
+        late.step(GamePhase.input)
+        assertTrue(late.tracker.isFrozen)
+        assertNull(late.tracker.completionHeaderSince)
+        assertNull(delayedCompletion(late, late.time + 0.05, late.time + 0.5))
+
+        for (reset in listOf<(Feed) -> Unit>(
+            { it.step(GamePhase.command) },
+            { it.step(GamePhase.presenting, slots = 1, highlight = 0) },
+            { it.tracker.reset() },
+            { it.tracker.invalidatePhase() },
+            { it.step(null, after = -1.0) },
+        )) {
+            val f = Feed()
+            f.hold(4, GamePhase.presenting, slots = 1, highlight = 0, glyph = "truth")
+            f.step(null, slots = 1, timerBar = true)
+            assertNotNull(f.tracker.completionHeaderSince)
+            reset(f)
+            assertNull(f.tracker.completionHeaderSince)
+            assertNull(delayedCompletion(f, f.time + 0.05, f.time + 0.5))
+        }
+    }
+
+    private fun delayedCompletion(f: Feed, sourceTime: Double, arrival: Double): HeaderReading? {
+        val reader = GameHeaderReader()
+        val request = requireNotNull(reader.submit(sourceTime, f.session))
+        reader.finishHeader(request, listOf("Glyph hack complete" to 0.9))
+        return reader.reading(
+            arrival,
+            f.session,
+            completionSince = f.tracker.completionHeaderSince,
+            completedMaximumAge = f.tracker.policy.unknownPhaseGrace,
+        )
     }
 
     @Test
