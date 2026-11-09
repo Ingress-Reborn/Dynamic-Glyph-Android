@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Machine-written; Needs Review; Not human-reviewed. -->
+<resources>
+    <string name="home_live_glyph_title">即時 Glyph 序列</string>
+    <string name="home_live_waiting">開始識別後，這裡會顯示目前的 Glyph 序列。</string>
+    <string name="overlay_preview_accessibility">由正式算繪器繪製的浮動視窗預覽</string>
+</resources>

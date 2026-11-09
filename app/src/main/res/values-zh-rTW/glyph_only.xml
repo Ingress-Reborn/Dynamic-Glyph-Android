@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="glyph_only_subtitle">Glyph 辨識與序列預測</string>
+    <string name="glyph_language_hint">選擇 Ingress 使用的語言，停止辨識後可修改。</string>
+    <string name="glyph_mode_colors">依照辨識階段調整視窗顏色</string>
+</resources>

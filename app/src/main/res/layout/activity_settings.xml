@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_title"
+            android:textColor="@color/primary_text"
+            android:textSize="30sp"
+            android:textStyle="bold" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/settings_game_language"
+            android:textColor="@color/primary_text"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+        <Spinner
+            android:id="@+id/settingsGameLanguageSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:contentDescription="@string/settings_game_language" />
+        <TextView
+            android:id="@+id/settingsDetectedLanguageText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/secondary_text"
+            android:textSize="13sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/floating_window"
+            android:textColor="@color/primary_text"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/settingsCanvasWidthLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:textColor="@color/primary_text" />
+        <SeekBar
+            android:id="@+id/settingsCanvasWidthSeek"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:contentDescription="@string/settings_canvas_width"
+            android:max="24" />
+        <TextView
+            android:id="@+id/settingsCanvasHeightLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/primary_text" />
+        <SeekBar
+            android:id="@+id/settingsCanvasHeightSeek"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:contentDescription="@string/settings_canvas_height"
+            android:max="16" />
+        <TextView
+            android:id="@+id/settingsCanvasSharpnessLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/primary_text" />
+        <SeekBar
+            android:id="@+id/settingsCanvasSharpnessSeek"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:contentDescription="@string/setup_sharpness"
+            android:max="2" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/settingsApplyCanvasButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_apply" />
+            <Button
+                android:id="@+id/settingsResetCanvasButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/settings_reset" />
+        </LinearLayout>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_canvas_footer"
+            android:textColor="@color/secondary_text"
+            android:textSize="13sp" />
+        <Switch
+            android:id="@+id/settingsModeColorsSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/glyph_mode_colors"
+            android:textColor="@color/primary_text" />
+        <Switch
+            android:id="@+id/settingsHideCaptureSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/settings_hide_capture"
+            android:textColor="@color/primary_text" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_hide_capture_footer"
+            android:textColor="@color/secondary_text"
+            android:textSize="13sp" />
+    </LinearLayout>
+</ScrollView>

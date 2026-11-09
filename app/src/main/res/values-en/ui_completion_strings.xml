@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_live_glyph_title">Live Glyph sequence</string>
+    <string name="home_live_waiting">Start recognition to see the live Glyph sequence here.</string>
+    <string name="overlay_preview_accessibility">Floating window preview drawn by the production renderer</string>
+</resources>

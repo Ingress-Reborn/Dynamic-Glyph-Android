@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="glyph_only_subtitle">Glyph recognition and sequence prediction</string>
+    <string name="glyph_language_hint">Choose the language shown in Ingress. Stop recognition before changing it.</string>
+    <string name="glyph_mode_colors">Color window by recognition phase</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Machine-written; Needs Review; Not human-reviewed. -->
+<resources>
+    <string name="home_live_glyph_title">ライブ Glyph シーケンス</string>
+    <string name="home_live_waiting">認識を開始すると、ここに現在の Glyph シーケンスが表示されます。</string>
+    <string name="overlay_preview_accessibility">本番レンダラーで描画したフローティングウィンドウのプレビュー</string>
+</resources>

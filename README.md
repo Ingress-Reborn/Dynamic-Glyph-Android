@@ -1,192 +1,71 @@
-# DynamicGlyph
+# Glyph Lens — Android
 
-An iOS research prototype. In the mobile game Ingress, a "Glyph hack" shows a
-short sequence of shapes that the player then has to redraw from memory. This
-app watches the game on the player's own screen, recognises those shapes with
-on-device image recognition, and shows the predicted sequence in a small
-floating window and in the Dynamic Island.
+Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android 应用。**0.3.0 仅保留 Glyph 自动识别与序列预测，仅支持 arm64，提供实时与省电两种模式。** 应用通过系统授权读取屏幕，在游戏展示 Glyph 时识别形状与槽位，并在小型原生悬浮窗中显示已确认内容和唯一匹配的预测后缀；进入输入阶段后冻结展示序列。
 
-The code is **source-available**: you can read it, under the terms in
-[What you may do with this code](#what-you-may-do-with-this-code).
+当前模式、操作与验收要求见 [POWER_MODES.md](Docs/POWER_MODES.md)，实施原则与用户七条工程规则见 [Plan.md](Plan.md)。本轮新增了“本轮识别完成后自动停止”选项，完整版本正在统一构建与验收；此前不含该选项的中间构建数据不作为最终结果。[GLYPH_ONLY.md](Docs/GLYPH_ONLY.md) 保留 0.2.0 的历史证据，不作为 0.3.0 的验收结果。
 
-Device requirements, known limitations, and field-test evidence are documented
-in the [field-testing instructions](Docs/FIELD_TESTING.md).
+## 当前功能
 
-## Before you install this
+- 首页选择实时/省电模式、开始/停止、系统屏幕共享授权、显示/隐藏悬浮窗和打开 Ingress。
+- 默认实时模式在共享授权后立即识别；省电模式先显示可拖动的 48dp 悬浮图标，点击后开始识别。
+- 两种模式点击识别窗的 × 均停止识别、回到图标待命；待命不采集图像、不运行 OCR，再次点击图标可继续使用本次共享授权。
+- 首页提供“本轮识别完成后自动停止”开关，默认关闭，两种模式都适用。开启后进入输入阶段、序列冻结时停止采集与 OCR，保留静态识别结果和“开始识别”按钮。
+- 实际节点/槽位定位、跨帧稳定识别、连续确认前缀预测；观察、确认和预测分别显示。
+- 输入期序列冻结，保留重复项与缺槽，不把玩家笔画当作新的展示 Glyph。
+- 可拖动的 Canvas 悬浮窗，按真实内容空隙自动摆放；手动拖动后保留用户位置。
+- 游戏语言自动/手动选择，画布大小、清晰度与显示设置。
+- 内置形状表和序列表，可通过系统文件选择器导入替换。
+- 随包 Latin、中文、日文、韩文四类 OCR 模型，安装后离线读取游戏阶段标题。
 
-Read this part. It is about your account, not ours.
+游戏结算/分数、装备与掉落、命令业务、输入正确性判断、历史统计、数据库、云同步、录像与音频、诊断导出、小组件、快捷设置、引导和演示功能已从本版范围删除，不作为未来完整移植的待办；保留本轮 Glyph 识别结果不恢复这些业务。
 
-The app watches the screen while you play and tells you what it saw. Ingress is
-now operated by Niantic Spatial. Its
-[Player Guidelines](https://www.nianticspatial.com/en/guidelines) list "using
-modified or unofficial software" as a form of cheating, and this app is
-unofficial software. It does not modify or talk to the game, but the guidelines
-draw no line between software that changes the game and software that helps you
-play it.
+## 使用要求
 
-Niantic Spatial finds violations through automated systems and player
-reports. A violation can lead to a warning, degraded gameplay, suspension, or
-permanent termination, "sometimes without warning". The action can reach every
-Niantic Spatial product, and you may be barred from creating a new account.
-That falls on the player's account, not on this repository. Read the guidelines
-and the [Terms of Service](https://nianticspatial.com/terms) yourself before you
-install.
+需要 Android 10 / API 29 以上的 **arm64-v8a** 设备。安装包不包含 32 位 ARM、x86 或 x86_64 原生库；验证设备也必须能够运行 arm64 应用。
 
-Nothing here is hidden from you: it captures the screen with the system
-recording indicator visible throughout, and it keeps its evidence in files you
-can read. Install it understanding what you are choosing.
+在首页选择模式并开始，允许显示在其他应用上层，在系统共享对话框选择**共享整个屏幕**，然后打开游戏。实时模式立即识别；省电模式需点击悬浮图标才开始。模式仅能在完全停止共享后切换，选择会保存。
 
-## What you may do with this code
+如开启**本轮识别完成后自动停止**，本组 Glyph 展示结束、进入输入阶段并冻结后，会自动停止识别，悬浮窗保留当时结果。漏项和不确定项仍按原状态显示，自动停止不代表所有 Glyph 都已成功识别。点击结果窗的**开始识别**会清空旧内容并开始新会话；点 × 则清空结果、收回待命图标。开启此选项会确保悬浮窗显示，方便查看结果和再次开始。
 
-The code is published under the
-[PolyForm Noncommercial License 1.0.0](LICENSE). In plain words:
+点击识别窗的 **×** 停止识别并回到图标。此时图像采集和 OCR 已停止，但保留共享授权，因此系统的共享指示和前台通知仍可见；这不表示仍在识别。再次点击图标开始新的识别序列，不沿用上一次内容，也不重新弹出共享同意框。首页或通知的**停止**才会彻底结束共享并移除悬浮窗口；系统主动结束共享后也需要重新授权。
 
-- You **may** read it, build it, use it, change it and share it, including
-  your changed versions, for any non-commercial purpose.
-- You **may not** use it, or anything made from it, to make money. That
-  includes selling it or charging for it or for features in it.
-- Anything you share must come with these license terms and the
-  `Required Notice:` line from LICENSE.
-- For anything else, ask: <dynamic-glyph@szres.org>.
+当前识别范围为竖屏；横屏、方形、分屏及单应用共享到悬浮窗的坐标映射尚未认证。应用不需要 root、无障碍服务或麦克风。
 
-The LICENSE file is the binding text; this list only summarises it.
+系统共享用于当前识别，不提供录像保存、音频采集或云端上传。阶段标题中仍需区分命令/展示/输入/完成，避免在错误阶段确认 Glyph；这不等于保留命令或结果业务。
 
-The name "Dynamic Glyph" and its icons are not licensed: a copy or changed
-version you share must use its own name and icon. Game imagery and trademarks
-belong to their owners. See [NOTICE](NOTICE.md). Suggestions and
-pull requests are welcome on the terms in [CONTRIBUTING](CONTRIBUTING.md).
+## 构建
 
-Two kinds of test input are not distributed: the game screenshots that the
-recognition tests read, and the third-party reference tables. Tests that need
-them are reported as skipped. See their
-[provenance](Packages/GlyphRecognition/Tests/GlyphRecognitionTests/Fixtures/PROVENANCE.md).
+工程为 Kotlin + Android Views/Canvas，包含 `:app` 与纯 Kotlin `:recognition` 两个模块。使用 JDK 17、仓库中的 Gradle Wrapper 和本机 Android SDK；SDK 路径放在本机 `local.properties`，不写入共享构建文件。具体依赖版本以 [版本目录](gradle/libs.versions.toml) 和 [应用构建配置](app/build.gradle.kts) 为准。
 
-## Building it yourself
+Windows 下从仓库根目录执行：
 
-You need a Mac with **Xcode 27** (tested with Xcode 27.2) and
-[XcodeGen](https://github.com/yonaskolb/XcodeGen) (tested with 2.46.0). The
-app runs on iOS 18 or later and captures through ScreenCaptureKit on iOS 27.
-It cannot run in the Simulator, so to use it you need an iPhone and an Apple
-Developer account.
-
-```sh
-brew install xcodegen
-cd Apps/DynamicGlyph && xcodegen generate
-open DynamicGlyph.xcworkspace
+```powershell
+.\gradlew.bat :recognition:test :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :app:assembleRelease :app:lintRelease
 ```
 
-That is enough to run the tests in the Simulator (see [Tests](#tests)). To
-install on your own iPhone:
+Debug APK 输出到 `app/build/outputs/apk/debug/app-debug.apk`。Release 启用 R8、仅打包 arm64；包含自动停止选项的最终 APK 大小、SHA-256、签名和权限检查会在统一构建后写入 [0.3.0 验收记录](Docs/POWER_MODES.md#5-030-验收记录)，不沿用中间构建的包信息。
 
-1. **Team ID.** Copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig`
-   and set `DEVELOPMENT_TEAM` to your team identifier, which is listed under
-   Membership in the Apple Developer portal. That file is gitignored.
-2. **Bundle identifier.** `org.szres.DynamicGlyph` is registered to this
-   project, so you need your own. Replace `org.szres` with a prefix you own
-   everywhere it occurs in `Apps/DynamicGlyph/project.yml`: `bundleIdPrefix`,
-   the `PRODUCT_BUNDLE_IDENTIFIER` of the app and the two extensions
-   (`.GlyphWidget`, `.GlyphBroadcast`) and the test target. Then change
-   `BroadcastChannel.extensionBundleID` in
-   `Apps/DynamicGlyph/FrameTransport/BroadcastChannel.swift`.
-3. **App Group.** The app shares `group.org.szres.DynamicGlyph` with both
-   extensions. Pick your own, for example `group.<your prefix>.DynamicGlyph`,
-   and set it in the three `com.apple.security.application-groups` entries in
-   `project.yml`, in `BroadcastChannel.appGroup`, and in the `appGroup`
-   constant in `Apps/DynamicGlyph/Shared/StatisticsWidgetSummary.swift`.
-4. **iCloud container.** Result sync uses the CloudKit container
-   `iCloud.org.szres.DynamicGlyph`. Set your own in `project.yml`
-   (`com.apple.developer.icloud-container-identifiers`) and in
-   `HackResultStore.cloudContainer` in
-   `Apps/DynamicGlyph/Sources/Results/HackResultStore.swift`.
-5. Run `xcodegen generate` again, choose your iPhone and build the
-   `DynamicGlyph` scheme. With automatic signing, Xcode registers the App IDs,
-   the App Group and the iCloud container from the Signing & Capabilities tab.
+本轮测试环境为 Android 15 / API 35、1216×2688 / 440dpi 的模拟器，通过 ARM64 native bridge 执行 arm64 应用。最终验收需同时覆盖图标待命、自动停止后保留结果、再次开始和五图识别。模拟环境中的短期 CPU 观测不等同于零耗电、物理 ARM64 手机温度或长期电池验收。
 
-The [contributor guide](CONTRIBUTING.md#signing) covers signing and CloudKit
-in more detail.
+iOS 使用系统 Vision，Android 当前选择将离线 OCR 模型随包携带。0.2.0 产物中 arm64 OCR 原生库本身约 11MB，另有模型、代码和资源；这不是最终 APK 大小，也不能承诺与 iOS 同体积。体积依据及 0.2.0 记录见 [GLYPH_ONLY.md](Docs/GLYPH_ONLY.md#4-为什么仍保留离线-ocr)。
 
-## Layout
+## 仓库与历史资料
 
-| Path | What it is |
-|---|---|
-| `Packages/GlyphRecognition` | Pure Swift pixel recognition, Glyph/sequence tables and prediction. Separate Apple image-decoding adapter and a `glyph-recognize` CLI. See [recognition usage](Packages/GlyphRecognition/RECOGNITION.md). |
-| `Apps/DynamicGlyph` | The app: capture, recognition, phase and slot tracking, prediction, a Picture in Picture sequence viewer and a Live Activity. See [field testing](Docs/FIELD_TESTING.md); the original capture verdict is in [capture results](Docs/CAPTURE_SPIKE_RESULT.md). |
-| `Tools/detect-nodes.swift` | Finds the eleven array nodes in a captured frame. How `NodeArray.canonical` was derived. |
-| `Tools/check-phase-replay.py` | Replays a recording through the whole live pipeline and checks the recovered sequence against the manual annotation. |
-| `Tools/check-ablations.py` | Replays every annotated recording with one pipeline component switched off at a time. See the [ablation study](Tools/AblationResults/2026-09-22/README.md). |
+| 路径 | 用途 |
+| --- | --- |
+| `app/` | Android 首页、设置、系统采集、OCR、悬浮窗及表导入 |
+| `recognition/` | Glyph 像素识别、阶段/槽位追踪、预测和 JVM 测试 |
+| `Docs/POWER_MODES.md` | 0.3.0 模式、待命/恢复行为和验收要求 |
+| `Docs/GLYPH_ONLY.md` | 0.2.0 精简范围、识别语义和历史验证记录 |
+| `Plan.md` | 当前实施约束、用户规则和验收要求 |
+| `Apps/`、`Packages/`、`Tools/` | iOS 参考实现、历史测试和研发工具，不参与 Android 打包 |
 
-Xcode projects are generated from `project.yml` and are not committed (see
-[Building it yourself](#building-it-yourself)). Open the committed workspace, which includes the package as a top-level item.
-The `DynamicGlyph` scheme builds the app for a phone, and ⌘U with an **iOS 27
-simulator** selected runs both the app's tests (`DynamicGlyphTests`) and the
-package's. The app itself cannot be built for a simulator — ScreenCaptureKit is
-not in the simulator SDK — so the test target compiles only the app sources it
-tests. Regenerating the project preserves all of this.
+[精简前迁移计划](Docs/HISTORY/PLAN_BEFORE_GLYPH_ONLY_2026-11-09.md)、[早期 Glyph 验收](Docs/GLYPH_PREDICTION.md)和[比例适配记录](Docs/ANDROID_ADAPTATION.md)均为历史资料。早期文档中的完整迁移、Room/Drive、录制、小米岛及 250ms OCR 说明不是当前产品范围或策略。旧矩阵测试与 CPU 数据对应各自旧包，不作为新版本结论。
 
-## Tests
+## 许可证与来源
 
-```sh
-cd Packages/GlyphRecognition && make test           # package only, on the Mac
-xcodebuild test -workspace Apps/DynamicGlyph/DynamicGlyph.xcworkspace \
-  -scheme DynamicGlyph -destination 'platform=iOS Simulator,name=<an iOS 27 iPhone>'
-```
+本仓库代码是 **source-available（源码可读）**，使用 [PolyForm Noncommercial License 1.0.0](LICENSE)。许可证原文及其中的 `Required Notice:` 保持不变；具体使用、修改和分发条件以许可证为准。
 
-`make` rather than `swift test` directly: macOS 27 stamps `com.apple.provenance`
-on files written by unsigned processes and the codesign step rejects bundles
-carrying it, so the build has to be run, the attribute cleared, and the signing
-retried. The Makefile does that.
+原项目名称与图标、第三方游戏素材及商标的说明见 [NOTICE.md](NOTICE.md)，贡献约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。Android 工作名称为 Glyph Lens，不改变原代码版权和许可条件。
 
-Reference tables are optional local inputs. Tests that require missing tables
-are reported as skipped; independent tests still run. For full corpus validation,
-run `make test-full` from the package directory (missing tables fail this mode),
-or set `GLYPH_REQUIRE_REFERENCE_DATA=1` when running Swift/Xcode tests. See
-[reference data](Packages/GlyphRecognition/Tests/GlyphRecognitionTests/Fixtures/PROVENANCE.md).
-A green run with skips is not evidence that the full corpus passed.
-
-The game screenshots and crops the recognition tests read are not distributed
-either. They are in a private git submodule at
-`Packages/GlyphRecognition/Tests/GlyphRecognitionTests/Fixtures/Assets`;
-with access, `git clone --recurse-submodules` fetches them and those tests run.
-Without them, the tests that read them are reported as skipped with the reason.
-
-Repository maintenance scripts have an offline regression harness:
-
-```sh
-python3 scripts/tests/test_repository_scripts.py
-```
-
-It uses disposable repositories and never touches this checkout. The download
-success test needs the optional CSVs; the rejection test always runs.
-
-## State
-
-- ScreenCaptureKit capture of a foreground third-party app is **proven** on
-  iOS 27.2, un-redacted, while backgrounded.
-- Node geometry and labelling are **derived and tested**, with one documented
-  limit: a whole-array left-right reflection cannot be ruled out from the data
-  alone and needs an independently labelled capture.
-- Pixel recognition is **implemented**: node-ring fitting, line evidence,
-  direction-independent shape matching, and spatial accumulation within one
-  Glyph. Positive recognition is validated on synthetic images of all 142
-  shapes and one manually annotated five-Glyph recording. See the
-  [recording validation](Tools/RecordingResults/2026-09-17/README.md).
-- Game phase and presentation slots are **implemented and validated offline**.
-  The phase comes from the header text, the slot count and the current slot
-  from the indicator strip, and a Glyph is only confirmed in the sequence when the
-  indicator advances or the presentation ends. Replaying the recording through
-  the whole pipeline recovers `see, truth, see, future, begin` with no
-  annotation in the loop — see the
-  [phase replay](Tools/PhaseReplayResults/2026-09-18/README.md).
-- Sequence prediction is **connected**, and now takes the independently counted
-  slot count into account. Without it the recording's four-Glyph prefix stays
-  ambiguous, because it is itself a complete sequence in the table.
-- The Picture in Picture sequence viewer and the Live Activity are
-  **implemented**. Current device evidence and remaining checks are documented
-  in the [field-testing instructions](Docs/FIELD_TESTING.md).
-- iOS 18–26 capture runs through a ReplayKit broadcast extension, whose
-  frames reach recognition in the app through a shared-memory ring
-  ([protocol](Docs/FRAME_TRANSPORT.md)). There the floating window is
-  required, because the app keeps running over Ingress only while it is open.
-  First device run on iOS 26: one complete hack recognised, results read,
-  20 Hz with no frames lost, extension peak 9.7 MB. Longer sessions are still
-  to be measured.
+部分真实截图、录屏和参考测试输入未随仓库分发。缺少这些素材的测试需明确标为跳过，不能算作识别通过；原输入来源记录见 [测试素材说明](Packages/GlyphRecognition/Tests/GlyphRecognitionTests/Fixtures/PROVENANCE.md)。

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="standby_icon_start">开始 Glyph 识别</string>
+    <string name="overlay_result_ready">本轮识别已停止</string>
+    <string name="overlay_start_recognition">开始识别</string>
+</resources>

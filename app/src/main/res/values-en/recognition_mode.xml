@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="recognition_mode_title">Recognition mode</string>
+    <string name="recognition_mode_realtime">Real time</string>
+    <string name="recognition_mode_power_saving">Power saving</string>
+    <string name="recognition_mode_realtime_hint">Recognition starts as soon as screen sharing is authorized. Tap × to stop recognition and return to the icon.</string>
+    <string name="recognition_mode_power_saving_hint">After sharing your screen, tap the floating icon to start recognition. Tap × to stop and return to the icon. While waiting, frames and text are not processed; system screen-sharing authorization stays active.</string>
+    <string name="status_standby">Standby. Tap the floating icon to start recognition.</string>
+    <string name="status_standby_hidden">Standby. The floating icon is hidden; restore it from the home screen.</string>
+    <string name="stop_sharing">Stop screen sharing</string>
+    <string name="home_live_standby">Recognition is stopped. Tap the floating icon when you are ready.</string>
+    <string name="notification_standby_text">Screen sharing remains authorized. Tap the icon to recognize; use Stop in this notification or the app to end sharing.</string>
+    <string name="notification_standby_title">Glyph Lens is on standby</string>
+    <string name="auto_stop_after_round">Stop automatically after this round</string>
+    <string name="auto_stop_after_round_hint">Stops recognition when the sequence ends and the input phase begins. Keeps the result and a Start recognition button.</string>
+    <string name="status_result_ready">Recognition stopped. The result is kept; tap Start recognition when ready.</string>
+    <string name="status_result_ready_hidden">Recognition stopped. The result window is hidden; restore it from the home screen.</string>
+    <string name="notification_result_ready_title">Glyph result ready</string>
+    <string name="notification_result_ready_text">Recognition is stopped and the result is kept. Tap Start recognition in the window for another round, or Stop to end screen sharing.</string>
+</resources>

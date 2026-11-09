@@ -4,6 +4,8 @@
 # Build products
 .build/
 build/
+.gradle/
+.kotlin/
 DerivedData/
 *.xcuserstate
 xcuserdata/
@@ -42,6 +44,9 @@ Tools/RecordingResults/*/*.jpg
 # the full test suite runs; without it the table-dependent tests skip.
 Packages/GlyphRecognition/Tests/GlyphRecognitionTests/Fixtures/glyph.csv
 Packages/GlyphRecognition/Tests/GlyphRecognitionTests/Fixtures/glyph_line.csv
+
+# Android SDK location and other per-machine build values.
+/local.properties
 
 # Per-machine build values. Config/Build.xcconfig includes both optionally, so
 # a clone with neither still generates and builds: Local.xcconfig is your own
