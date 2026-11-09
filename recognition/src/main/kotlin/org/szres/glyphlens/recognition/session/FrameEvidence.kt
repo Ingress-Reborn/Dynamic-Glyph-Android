@@ -5,6 +5,7 @@ import org.szres.glyphlens.recognition.GlyphID
 import org.szres.glyphlens.recognition.GlyphPath
 import org.szres.glyphlens.recognition.image.GameUILayout
 import org.szres.glyphlens.recognition.image.GlyphFrameObservation
+import org.szres.glyphlens.recognition.image.NodeArrayDetection
 import org.szres.glyphlens.recognition.image.SlotStripReading
 import org.szres.glyphlens.recognition.image.SlotStripRejection
 import org.szres.glyphlens.recognition.text.HeaderReading
@@ -90,8 +91,9 @@ class FrameEvidence(
             slotResult: Result<SlotStripReading>? = null,
             hasInputTimerBar: Boolean = false,
             layout: GameUILayout = GameUILayout(),
+            calibration: NodeArrayDetection? = observation?.calibration,
         ): FrameEvidence {
-            val fit = observation?.calibration
+            val fit = calibration
             val layoutConsistent = fit?.let(layout::isConsistent) == true
             return FrameEvidence(
                 sessionID = sessionID,

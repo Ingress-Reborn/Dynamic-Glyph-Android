@@ -11,7 +11,12 @@ class GameUILayoutLocator {
         private set
     var lastSlotResult: Result<SlotStripReading> = Result.failure(SlotStripRejection.NoMarkers)
         private set
+    var lastSlotPixelReadCount = 0
+        private set
+    var lastSlotUsedCache = false
+        private set
 
+    private var slotReader = SlotStripReader(layout)
     private var located = false
     private var timerLocated = false
     val hasLocatedTimer: Boolean get() = timerLocated
@@ -24,6 +29,9 @@ class GameUILayoutLocator {
     fun reset() {
         layout = GameUILayout()
         lastSlotResult = Result.failure(SlotStripRejection.NoMarkers)
+        lastSlotPixelReadCount = 0
+        lastSlotUsedCache = false
+        slotReader = SlotStripReader(layout)
         located = false
         timerLocated = false
         anchor = null
@@ -40,7 +48,7 @@ class GameUILayoutLocator {
         height = image.height
         if (calibration != null) anchor = calibration
         val band = FrameTopBand(image, image.height)
-        lastSlotResult = SlotStripReader(layout).read(band)
+        lastSlotResult = slotReader.read(band)
         val reading = lastSlotResult.getOrNull()
         val fullWidthArray = calibration != null && abs(calibration.size.x / 0.75 - width) <= width * 0.025
         if (reading != null && (located || fullWidthArray)) {
@@ -49,17 +57,21 @@ class GameUILayoutLocator {
             nextSearch = sourceTime + 0.5
             locateStrip(image, calibration)?.let {
                 layout = it.layout
+                slotReader = it.reader
                 lastSlotResult = it.result
                 located = true
                 timerLocated = false
                 nextTimerSearch = Double.NEGATIVE_INFINITY
             }
         }
+        lastSlotPixelReadCount = slotReader.lastPixelReadCount
+        lastSlotUsedCache = slotReader.usedCachedMarkers
         if (lastSlotResult.getOrNull()?.hasInputTimerBar == true) timerLocated = true
         if (located && !timerLocated && sourceTime >= nextTimerSearch) {
             nextTimerSearch = sourceTime + 0.5
             locateTimer(band, calibration)?.let {
                 layout = it
+                slotReader = SlotStripReader(layout)
                 lastSlotResult = lastSlotResult.map { reading -> reading.copy(hasInputTimerBar = true) }
                 timerLocated = true
             }
@@ -84,7 +96,11 @@ class GameUILayoutLocator {
         val centerY get() = (top + bottom) / 2.0
     }
 
-    private data class LocatedStrip(val layout: GameUILayout, val result: Result<SlotStripReading>)
+    private data class LocatedStrip(
+        val layout: GameUILayout,
+        val reader: SlotStripReader,
+        val result: Result<SlotStripReading>,
+    )
 
     private fun locateStrip(image: ColorImage, fit: NodeArrayDetection): LocatedStrip? {
         val contentWidth = fit.size.x / 0.75
@@ -120,8 +136,9 @@ class GameUILayoutLocator {
                 inputTimerBarTop = min(image.height - 1.0, top + referenceHeight * 0.114) / image.height,
                 inputTimerBarBottom = min(image.height.toDouble(), top + referenceHeight * 0.142) / image.height,
             )
-            val result = SlotStripReader(candidate).read(band)
-            if (result.isSuccess) return LocatedStrip(candidate, result)
+            val reader = SlotStripReader(candidate)
+            val result = reader.read(band)
+            if (result.isSuccess) return LocatedStrip(candidate, reader, result)
         }
         return null
     }
@@ -145,10 +162,7 @@ class GameUILayoutLocator {
         val minimum = contentWidth * 0.085
         val maximum = contentWidth * 0.190
         fun colored(index: Int): Boolean {
-            val base = index * 3
-            val red = image.pixels[base].toInt() and 255
-            val green = image.pixels[base + 1].toInt() and 255
-            val blue = image.pixels[base + 2].toInt() and 255
+            val (red, green, blue) = image[index % image.width, index / image.width]
             return SlotStripReader.isGold(red, green, blue) || SlotStripReader.isViolet(red, green, blue)
         }
         for (start in visited.indices) {

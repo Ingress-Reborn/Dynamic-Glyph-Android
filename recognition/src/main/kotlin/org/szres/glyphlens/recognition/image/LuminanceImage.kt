@@ -4,20 +4,40 @@ import org.szres.glyphlens.recognition.GlyphPoint
 import kotlin.math.ceil
 import kotlin.math.floor
 
-/** A packed, top-left-origin, 8-bit luminance image. */
-class LuminanceImage(
+/** Top-left-origin luminance samples, either packed or read directly from an owned RGBA frame. */
+class LuminanceImage private constructor(
     val width: Int,
     val height: Int,
-    val pixels: ByteArray,
+    private var packedPixels: ByteArray?,
+    private val rgbaPixels: ByteArray?,
 ) {
-    init {
+    constructor(width: Int, height: Int, pixels: ByteArray) : this(width, height, pixels, null) {
         require(width > 0 && height > 0) { "Image dimensions must be positive" }
         val count = width.toLong() * height.toLong()
         require(count == pixels.size.toLong()) { "Expected $count luminance bytes, found ${pixels.size}" }
     }
 
+    /** Explicit packed access materializes an RGBA view; sparse readers use the sample operators. */
+    val pixels: ByteArray
+        get() {
+            packedPixels?.let { return it }
+            return ByteArray(width * height) { this[it].toByte() }.also { packedPixels = it }
+        }
+
+    internal val hasPackedPixels: Boolean get() = packedPixels != null
+
     /** Returns an unsigned sample in 0...255. */
-    operator fun get(x: Int, y: Int): Int = pixels[y * width + x].toInt() and 0xff
+    operator fun get(x: Int, y: Int): Int = this[y * width + x]
+
+    operator fun get(index: Int): Int {
+        packedPixels?.let { return it[index].toInt() and 0xff }
+        val rgba = rgbaPixels!!
+        val base = index * 4
+        val red = rgba[base].toInt() and 0xff
+        val green = rgba[base + 1].toInt() and 0xff
+        val blue = rgba[base + 2].toInt() and 0xff
+        return (77 * red + 150 * green + 29 * blue) shr 8
+    }
 
     /** Nearest-pixel sampling; out-of-frame points have no evidence. */
     fun sample(point: GlyphPoint): Double {
@@ -29,6 +49,9 @@ class LuminanceImage(
     }
 
     companion object {
+        internal fun fromRgba(width: Int, height: Int, pixels: ByteArray): LuminanceImage =
+            LuminanceImage(width, height, null, pixels)
+
         internal fun roundedAwayFromZero(value: Double): Double =
             if (value < 0.0) ceil(value - 0.5) else floor(value + 0.5)
     }

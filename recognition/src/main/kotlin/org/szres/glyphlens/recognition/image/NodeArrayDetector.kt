@@ -5,6 +5,8 @@ import org.szres.glyphlens.recognition.GlyphPoint
 import org.szres.glyphlens.recognition.NodeArray
 import org.szres.glyphlens.recognition.NodeIndex
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
@@ -25,10 +27,35 @@ data class NodeArrayDetection(
 
 /** Finds bright annular components, then requires agreement with the entire lattice. */
 class NodeArrayDetector {
+    /** Re-fits the eleven nearby rings so a small movement cannot keep old sample coordinates alive. */
+    fun revalidate(image: LuminanceImage, calibration: NodeArrayDetection): NodeArrayDetection? {
+        val tolerance = max(2.0, calibration.size.y * 0.012)
+        val radius = calibration.nodeRadius + tolerance + 1.0
+        val rings = calibration.positions.map { position ->
+            val nearby = components(
+                image,
+                left = max(0, floor(position.x - radius).toInt()),
+                top = max(0, floor(position.y - radius).toInt()),
+                right = min(image.width, ceil(position.x + radius).toInt() + 1),
+                bottom = min(image.height, ceil(position.y + radius).toInt() + 1),
+            )
+            nearby.filter { ring ->
+                val delta = ring.center - position
+                delta.x * delta.x + delta.y * delta.y < tolerance * tolerance
+            }.minByOrNull { ring ->
+                val delta = ring.center - position
+                delta.x * delta.x + delta.y * delta.y
+            } ?: return null
+        }
+        val matches = rings.indices.map { Match(it, it) }
+        val geometry = fittedGeometry(rings, matches)
+        val result = detection(image, rings, matches, geometry.origin, geometry.size)
+        return if (result == calibration) calibration else result
+    }
+
     fun detect(image: LuminanceImage): NodeArrayDetection? {
         val rings = components(image)
         if (rings.size < 8 || rings.size > 128) return null
-        val canonical = NodeArray.canonical.positions
         var best: NodeArrayDetection? = null
 
         for (top in rings) {
@@ -49,44 +76,18 @@ class NodeArrayDetector {
                     var matches = match(rings, origin, size, tolerance)
                     if (matches.size < 8) continue
 
-                    // Least squares removes centroid noise from the three anchors.
-                    for (axis in 0..1) {
-                        val xs = matches.map { component(canonical[it.node], axis) }
-                        val ys = matches.map { component(rings[it.ring].center, axis) }
-                        val mx = xs.average()
-                        val my = ys.average()
-                        val variance = xs.sumOf { (it - mx) * (it - mx) }
-                        val covariance = xs.indices.sumOf { index ->
-                            (xs[index] - mx) * (ys[index] - my)
-                        }
-                        val newSize = covariance / variance
-                        val newOrigin = my - newSize * mx
-                        size = withComponent(size, axis, newSize)
-                        origin = withComponent(origin, axis, newOrigin)
-                    }
+                    val geometry = fittedGeometry(rings, matches)
+                    origin = geometry.origin
+                    size = geometry.size
                     matches = match(rings, origin, size, tolerance)
                     if (matches.size < 8 || origin.x < 0.0 || origin.y < 0.0 ||
                         origin.x + size.x >= image.width || origin.y + size.y >= image.height
                     ) continue
-                    val error = sqrt(matches.sumOf { match ->
-                        val target = origin + canonical[match.node] * size
-                        val delta = rings[match.ring].center - target
-                        delta.x * delta.x + delta.y * delta.y
-                    } / matches.size)
-                    val radii = matches.map { rings[it.ring].radius }.sorted()
-                    val fit = NodeArrayDetection(
-                        imageWidth = image.width,
-                        imageHeight = image.height,
-                        origin = origin,
-                        size = size,
-                        nodeRadius = radii[radii.size / 2],
-                        matchedNodes = matches.mapTo(linkedSetOf()) { NodeIndex.all[it.node] },
-                        rootMeanSquareError = error,
-                    )
+                    val fit = detection(image, rings, matches, origin, size)
                     val current = best
                     if (current == null || fit.matchedNodes.size > current.matchedNodes.size ||
                         (fit.matchedNodes.size == current.matchedNodes.size &&
-                            error < current.rootMeanSquareError)
+                            fit.rootMeanSquareError < current.rootMeanSquareError)
                     ) best = fit
                 }
             }
@@ -96,6 +97,51 @@ class NodeArrayDetector {
 
     private data class Ring(val center: GlyphPoint, val radius: Double)
     private data class Match(val node: Int, val ring: Int)
+    private data class Geometry(val origin: GlyphPoint, val size: GlyphPoint)
+
+    private fun fittedGeometry(rings: List<Ring>, matches: List<Match>): Geometry {
+        val canonical = NodeArray.canonical.positions
+        var origin = GlyphPoint(0.0, 0.0)
+        var size = GlyphPoint(0.0, 0.0)
+        // Least squares removes centroid noise from the individual rings.
+        for (axis in 0..1) {
+            val xs = matches.map { component(canonical[it.node], axis) }
+            val ys = matches.map { component(rings[it.ring].center, axis) }
+            val mx = xs.average()
+            val my = ys.average()
+            val variance = xs.sumOf { (it - mx) * (it - mx) }
+            val covariance = xs.indices.sumOf { index -> (xs[index] - mx) * (ys[index] - my) }
+            val newSize = covariance / variance
+            size = withComponent(size, axis, newSize)
+            origin = withComponent(origin, axis, my - newSize * mx)
+        }
+        return Geometry(origin, size)
+    }
+
+    private fun detection(
+        image: LuminanceImage,
+        rings: List<Ring>,
+        matches: List<Match>,
+        origin: GlyphPoint,
+        size: GlyphPoint,
+    ): NodeArrayDetection {
+        val canonical = NodeArray.canonical.positions
+        val error = sqrt(matches.sumOf { match ->
+            val target = origin + canonical[match.node] * size
+            val delta = rings[match.ring].center - target
+            delta.x * delta.x + delta.y * delta.y
+        } / matches.size)
+        val radii = matches.map { rings[it.ring].radius }.sorted()
+        return NodeArrayDetection(
+            imageWidth = image.width,
+            imageHeight = image.height,
+            origin = origin,
+            size = size,
+            nodeRadius = radii[radii.size / 2],
+            matchedNodes = matches.mapTo(linkedSetOf()) { NodeIndex.all[it.node] },
+            rootMeanSquareError = error,
+        )
+    }
 
     private fun match(
         rings: List<Ring>,
@@ -126,15 +172,26 @@ class NodeArrayDetector {
         return matches
     }
 
-    private fun components(image: LuminanceImage): List<Ring> {
+    private fun components(
+        image: LuminanceImage,
+        left: Int = 0,
+        top: Int = 0,
+        right: Int = image.width,
+        bottom: Int = image.height,
+    ): List<Ring> {
         val width = image.width
         val height = image.height
         val scale = min(width, height).toDouble()
-        val visited = BooleanArray(image.pixels.size)
+        val regionWidth = right - left
+        val regionHeight = bottom - top
+        val isLocal = regionWidth != width || regionHeight != height
+        val visited = BooleanArray(regionWidth * regionHeight)
         val stack = ArrayDeque<Int>()
         val rings = mutableListOf<Ring>()
-        for (start in image.pixels.indices) {
-            if ((image.pixels[start].toInt() and 0xff) < 160 || visited[start]) continue
+        for (start in visited.indices) {
+            val startX = start % regionWidth + left
+            val startY = start / regionWidth + top
+            if (image[startY * width + startX] < 160 || visited[start]) continue
             stack.addLast(start)
             visited[start] = true
             var count = 0
@@ -146,8 +203,8 @@ class NodeArrayDetector {
             var maxY = 0
             while (stack.isNotEmpty()) {
                 val index = stack.removeLast()
-                val x = index % width
-                val y = index / width
+                val x = index % regionWidth + left
+                val y = index / regionWidth + top
                 count++
                 sx += x
                 sy += y
@@ -155,16 +212,18 @@ class NodeArrayDetector {
                 maxX = max(maxX, x)
                 minY = min(minY, y)
                 maxY = max(maxY, y)
-                for (ny in max(0, y - 1)..min(height - 1, y + 1)) {
-                    for (nx in max(0, x - 1)..min(width - 1, x + 1)) {
-                        val next = ny * width + nx
-                        if (!visited[next] && (image.pixels[next].toInt() and 0xff) >= 160) {
+                for (ny in max(top, y - 1)..min(bottom - 1, y + 1)) {
+                    for (nx in max(left, x - 1)..min(right - 1, x + 1)) {
+                        val next = (ny - top) * regionWidth + nx - left
+                        if (!visited[next] && image[ny * width + nx] >= 160) {
                             visited[next] = true
                             stack.addLast(next)
                         }
                     }
                 }
             }
+            // A clipped fragment can look annular; local verification requires the complete ring.
+            if (isLocal && (minX == left || minY == top || maxX == right - 1 || maxY == bottom - 1)) continue
             val boxWidth = (maxX - minX + 1).toDouble()
             val boxHeight = (maxY - minY + 1).toDouble()
             val diameter = (boxWidth + boxHeight) / 2.0

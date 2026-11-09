@@ -9,6 +9,44 @@ import kotlin.math.roundToInt
 
 class GameUILayoutLocatorTest {
     @Test
+    fun stableViewportReusesMarkerSamplesButReadsTheCurrentHighlight() {
+        val viewport = Viewport(603, 1311, 1.0, 0, 0)
+        val first = viewport.place(scene(SyntheticSlotBands.outlinedBoxes().band()))
+        val fit = requireNotNull(NodeArrayDetector().detect(first.luminance))
+        val locator = GameUILayoutLocator()
+        val layout = locator.observe(first.topBand.image, fit, 0.0)
+        val initialPixels = locator.lastSlotPixelReadCount
+
+        val highlighted = viewport.place(scene(SyntheticSlotBands.outlinedBoxes(highlighted = 3).band()))
+        assertSame(layout, locator.observe(highlighted.topBand.image, fit, 0.05))
+        val reading = locator.lastSlotResult.getOrThrow()
+        assertEquals(4, reading.slotCount)
+        assertEquals(3, reading.highlightedIndex)
+        assertTrue(locator.lastSlotUsedCache)
+        assertTrue(locator.lastSlotPixelReadCount < initialPixels / 3)
+    }
+
+    @Test
+    fun cachedViewportDoesNotKeepMarkersAfterTheyDisappear() {
+        val viewport = Viewport(603, 1311, 1.0, 0, 0)
+        val first = viewport.place(scene(SyntheticSlotBands.outlinedBoxes(highlighted = 2).band()))
+        val fit = requireNotNull(NodeArrayDetector().detect(first.luminance))
+        val locator = GameUILayoutLocator()
+        locator.observe(first.topBand.image, fit, 0.0)
+        assertEquals(2, locator.lastSlotResult.getOrThrow().highlightedIndex)
+
+        val absent = viewport.place(scene(SyntheticSlotBands.Canvas().band()))
+        locator.observe(absent.topBand.image, fit, 0.05)
+        assertTrue(locator.lastSlotResult.isFailure)
+        assertTrue(!locator.lastSlotUsedCache)
+
+        val restored = viewport.place(scene(SyntheticSlotBands.outlinedBoxes(highlighted = 0).band()))
+        locator.observe(restored.topBand.image, fit, 0.10)
+        assertEquals(4, locator.lastSlotResult.getOrThrow().slotCount)
+        assertEquals(0, locator.lastSlotResult.getOrThrow().highlightedIndex)
+    }
+
+    @Test
     fun locatesWholeIndicatorsAndCountdownInsideDifferentViewports() {
         val source = scene(SyntheticSlotBands.timer())
         for (viewport in listOf(

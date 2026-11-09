@@ -20,6 +20,7 @@ import org.szres.glyphlens.recognition.image.GameUILayoutLocator
 import org.szres.glyphlens.recognition.image.GlyphFrameObservation
 import org.szres.glyphlens.recognition.image.GlyphFrameSession
 import org.szres.glyphlens.recognition.image.LumaGate
+import org.szres.glyphlens.recognition.image.NodeArrayDetection
 import org.szres.glyphlens.recognition.image.SlotStripReader
 import org.szres.glyphlens.recognition.image.toImageFrame
 import org.szres.glyphlens.recognition.session.FrameEvidence
@@ -105,7 +106,7 @@ class GlyphCaptureEngine internal constructor(
             val inHack = isInHack(at)
             val constrained = savesPower && power.isConstrained
             val decision = if (savesPower) {
-                pace.decide(at, gate.read(frame), busy = sawActivity, inHack = inHack, constrained = constrained)
+                pace.decide(at, if (inHack) null else gate.read(frame), busy = sawActivity, inHack = inHack, constrained = constrained)
             } else {
                 AnalysisRateController.Decision(AnalysisRateController.Mode.ACTIVE, pace.policy.activeInterval)
             }
@@ -124,7 +125,19 @@ class GlyphCaptureEngine internal constructor(
             val image = frame.toImageFrame(fullColor = true)
             val color = image.topBand.image
             meter.finish(PowerMetric.CONVERSION, conversionStarted)
-            val observation = if (decision.mode == AnalysisRateController.Mode.QUIET) {
+            val retainedFit = frameSession?.retainCalibration(image.luminance, at)
+            val slotStarted = meter.now()
+            if (frameSession != null) {
+                val layout = layoutLocator.observe(color, retainedFit, at)
+                if (layout != slotReader.layout) slotReader = SlotStripReader(layout)
+            }
+            var slotResult = if (frameSession == null) null else layoutLocator.lastSlotResult
+            var hasInputTimer = frameSession != null &&
+                (slotResult?.getOrNull()?.hasInputTimerBar ?: slotReader.hasTimerBar(image))
+            if (frameSession != null) meter.finish(PowerMetric.SLOT_STRIP, slotStarted)
+            val inputOnly = tracker.state == TrackingState.INPUT && tracker.isFrozen && hasInputTimer &&
+                retainedFit?.let(slotReader.layout::isConsistent) == true
+            val observation = if (decision.mode == AnalysisRateController.Mode.QUIET || inputOnly) {
                 null
             } else {
                 frameSession?.let { session ->
@@ -132,7 +145,7 @@ class GlyphCaptureEngine internal constructor(
                     val result = session.observe(image)
                     val total = (meter.now() - step).coerceAtLeast(0)
                     val hunt = session.lastGridHuntNanoseconds?.coerceIn(0, total)
-                    if (hunt != null && session.validatedAt == at &&
+                    if (session.validatedAt == at &&
                         result?.state == GlyphFrameObservation.State.NO_STROKE && result.calibration != null
                     ) {
                         fitFreshnessIsCurrentEpoch = true
@@ -142,16 +155,16 @@ class GlyphCaptureEngine internal constructor(
                     result
                 }
             }
-            val slotStarted = meter.now()
-            if (frameSession != null) {
-                val layout = layoutLocator.observe(color, observation?.calibration, at)
+            val fit = if (inputOnly) retainedFit else observation?.calibration
+            if (frameSession != null && fit != retainedFit) {
+                val relocatedAt = meter.now()
+                val layout = layoutLocator.observe(color, fit, at)
                 if (layout != slotReader.layout) slotReader = SlotStripReader(layout)
+                slotResult = layoutLocator.lastSlotResult
+                hasInputTimer = slotResult.getOrNull()?.hasInputTimerBar ?: slotReader.hasTimerBar(image)
+                meter.finish(PowerMetric.SLOT_STRIP, relocatedAt)
             }
-            val slotResult = if (frameSession == null) null else layoutLocator.lastSlotResult
-            val hasInputTimer = frameSession != null &&
-                (slotResult?.getOrNull()?.hasInputTimerBar ?: slotReader.hasTimerBar(image))
-            if (frameSession != null) meter.finish(PowerMetric.SLOT_STRIP, slotStarted)
-            val layoutConsistent = observation?.calibration?.let(slotReader.layout::isConsistent) == true
+            val layoutConsistent = fit?.let(slotReader.layout::isConsistent) == true
             // A cached fit can position the overlay after it stops proving the current screen is active.
             val freshFit = fitFreshnessIsCurrentEpoch && layoutConsistent &&
                 frameSession?.validatedAt?.let { at >= it && at - it <= 1.0 } == true
@@ -167,6 +180,7 @@ class GlyphCaptureEngine internal constructor(
                     slotResult = slotResult,
                     hasInputTimerBar = hasInputTimer,
                     layout = slotReader.layout,
+                    calibration = fit,
                 ),
             )
             val headerInterval = if (savesPower) {
@@ -179,14 +193,15 @@ class GlyphCaptureEngine internal constructor(
                 image = image,
                 color = color,
                 session = tracker.sessionID,
-                readsHeader = frameSession != null && (!savesPower || headerInterval != null),
+                readsHeader = frameSession != null && (!savesPower || headerInterval != null) &&
+                    !(tracker.state == TrackingState.INPUT && tracker.phaseSupportedByCurrentPixels),
                 inHack = inHack,
                 constrained = constrained,
                 headerInterval = headerInterval,
                 requiresFreshHeader = hasGlyphActivity,
                 layout = slotReader.layout,
             )
-            latest = snapshot(observation, at)
+            latest = snapshot(observation, at, calibration = fit)
             return latest
         } finally {
             val started = analysisStarted
@@ -242,6 +257,7 @@ class GlyphCaptureEngine internal constructor(
         sourceTime: Double,
         liveness: CaptureLiveness = CaptureLiveness.LIVE,
         acceptance: AcceptanceMode = AcceptanceMode.TrackingSequence,
+        calibration: NodeArrayDetection? = observation?.calibration,
     ): GlyphDisplaySnapshot = snapshots.snapshot(
         tracker = tracker,
         observation = observation,
@@ -249,6 +265,7 @@ class GlyphCaptureEngine internal constructor(
         sourceTime = sourceTime,
         liveness = liveness,
         acceptance = acceptance,
+        calibration = calibration,
     )
 
     private fun isInHack(at: Double): Boolean {

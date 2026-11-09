@@ -3,14 +3,14 @@ package org.szres.glyphlens.recognition.image
 import kotlin.math.ceil
 import kotlin.math.floor
 
-/** A packed, top-left-origin, 8-bit RGB image with no row padding. */
-class ColorImage(
+/** Top-left-origin RGB samples, either packed or read directly from an owned RGBA frame. */
+class ColorImage private constructor(
     val width: Int,
     val height: Int,
-    /** Three bytes per pixel, red first. Validated once at this boundary. */
-    val pixels: ByteArray,
+    private var packedPixels: ByteArray?,
+    private val rgbaPixels: ByteArray?,
 ) {
-    init {
+    constructor(width: Int, height: Int, pixels: ByteArray) : this(width, height, pixels, null) {
         require(width > 0 && height > 0) { "Image dimensions must be positive" }
         val pixelCount = width.toLong() * height.toLong()
         require(pixelCount <= Int.MAX_VALUE && pixelCount * 3L == pixels.size.toLong()) {
@@ -18,13 +18,49 @@ class ColorImage(
         }
     }
 
-    operator fun get(x: Int, y: Int): RgbPixel {
-        val base = (y * width + x) * 3
+    /** Explicit packed access materializes an RGBA view; sparse readers use the sample operators. */
+    val pixels: ByteArray
+        get() {
+            packedPixels?.let { return it }
+            val result = ByteArray(width * height * 3)
+            for (row in 0 until height) copyRgbRow(row, 0, width, result, row * width * 3)
+            packedPixels = result
+            return result
+        }
+
+    internal val hasPackedPixels: Boolean get() = packedPixels != null
+
+    operator fun get(x: Int, y: Int): RgbPixel = this[y * width + x]
+
+    operator fun get(index: Int): RgbPixel {
+        val packed = packedPixels
+        val source = packed ?: rgbaPixels!!
+        val base = index * (if (packed == null) 4 else 3)
         return RgbPixel(
-            red = pixels[base].toInt() and 0xff,
-            green = pixels[base + 1].toInt() and 0xff,
-            blue = pixels[base + 2].toInt() and 0xff,
+            red = source[base].toInt() and 0xff,
+            green = source[base + 1].toInt() and 0xff,
+            blue = source[base + 2].toInt() and 0xff,
         )
+    }
+
+    internal fun copyRgbRow(y: Int, left: Int, right: Int, destination: ByteArray, offset: Int) {
+        packedPixels?.let {
+            it.copyInto(destination, offset, (y * width + left) * 3, (y * width + right) * 3)
+            return
+        }
+        val rgba = rgbaPixels!!
+        var output = offset
+        for (x in left until right) {
+            val source = (y * width + x) * 4
+            destination[output++] = rgba[source]
+            destination[output++] = rgba[source + 1]
+            destination[output++] = rgba[source + 2]
+        }
+    }
+
+    companion object {
+        internal fun fromRgba(width: Int, height: Int, pixels: ByteArray): ColorImage =
+            ColorImage(width, height, null, pixels)
     }
 }
 

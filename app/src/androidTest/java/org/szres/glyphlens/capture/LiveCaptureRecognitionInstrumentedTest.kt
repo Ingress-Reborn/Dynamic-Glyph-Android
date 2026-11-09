@@ -83,18 +83,28 @@ class LiveCaptureRecognitionInstrumentedTest {
         )
     }
 
+    @Test
+    fun continuousFiveGlyphRoundsShareOneCaptureSession() {
+        verifyLiveCapture(
+            "real-recording.mp4", listOf("question", "less", "forget", "all", "lie"),
+            continuousRounds = true,
+        )
+    }
+
     private fun verifyLiveCapture(
         fileName: String,
         expected: List<String>,
         mode: RecognitionMode = RecognitionMode.REALTIME,
         checksPauseResume: Boolean = false,
         stopsAfterRound: Boolean = false,
+        continuousRounds: Boolean = false,
     ) {
         val source = File(context.getExternalFilesDir(null), fileName)
         val outputDirectory = File(context.getExternalFilesDir(null), "live-capture-tests").apply { mkdirs() }
         val reportName = source.nameWithoutExtension +
             (if (mode == RecognitionMode.POWER_SAVING) "-power-saving" else "") +
-            (if (stopsAfterRound) "-auto-stop" else "")
+            (if (stopsAfterRound) "-auto-stop" else "") +
+            (if (continuousRounds) "-continuous" else "")
         val output = File(outputDirectory, "$reportName.json")
         assertTrue("Cannot remove the previous live-test result: $output", !output.exists() || output.delete())
         val failureImage = File(outputDirectory, "$reportName-failure.png")
@@ -169,6 +179,29 @@ class LiveCaptureRecognitionInstrumentedTest {
             val accepted = observePredictionAndFrozenInput(fileName, expected, trace, stopsAfterRound)
             report = liveReport(source, expected, trace, mode, stopsAfterRound, accepted = accepted).apply {
                 put("recognitionLifecycle", lifecycle)
+            }
+            if (continuousRounds) {
+                val nextTrace = LiveTrace()
+                var nextAcceptance: AcceptedSession? = null
+                playFixture(playbackSource)
+                try {
+                    nextAcceptance = observePredictionAndFrozenInput(
+                        fileName, expected, nextTrace, stopsAfterRound = false,
+                        previousRound = accepted.input,
+                    )
+                    assertEquals("Continuous rounds must use the same capture session",
+                        accepted.input.captureSessionID, nextAcceptance.input.captureSessionID)
+                    assertTrue("A new round must advance its hack ID", nextAcceptance.input.hackID > accepted.input.hackID)
+                    lifecycle.put("continuedWithoutRestart", true)
+                    lifecycle.put("previousRoundPrefixCleared", true)
+                    lifecycle.put("firstHackID", accepted.input.hackID)
+                    lifecycle.put("secondHackID", nextAcceptance.input.hackID)
+                    lifecycle.put("captureSessionID", accepted.input.captureSessionID.toString())
+                } finally {
+                    lifecycle.put("continuousNextRound", liveReport(source, expected, nextTrace, mode, false, accepted = nextAcceptance).apply {
+                        put("status", if (nextAcceptance == null) "failed" else "passed")
+                    })
+                }
             }
             if (checksPauseResume || stopsAfterRound) {
                 if (!stopsAfterRound) {
@@ -381,7 +414,8 @@ class LiveCaptureRecognitionInstrumentedTest {
         val prediction: GlyphDisplaySnapshot,
         val input: GlyphDisplaySnapshot,
         val elapsedMillis: Long,
-        val retainedResult: JSONObject? = null,
+        val retainedResult: JSONObject?,
+        val measurements: JSONObject,
     )
 
     private fun observePredictionAndFrozenInput(
@@ -390,22 +424,37 @@ class LiveCaptureRecognitionInstrumentedTest {
         trace: LiveTrace,
         stopsAfterRound: Boolean,
         ignoreStartupInput: Boolean = false,
+        previousRound: GlyphDisplaySnapshot? = null,
     ): AcceptedSession {
+        val measurements = RoundMeasurements()
         val predictions = mutableMapOf<Int, GlyphDisplaySnapshot>()
         var frozen: GlyphDisplaySnapshot? = null
         var frozenAt = 0L
         var frozenFrames = 0L
         var stoppedPowerBaseline: PowerSnapshot? = null
         var last: GlyphDisplaySnapshot? = null
+        var nextRoundStarted = false
         val startedAt = SystemClock.elapsedRealtime()
         val deadline = startedAt + 40_000
         while (SystemClock.elapsedRealtime() < deadline) {
             val snapshot = CaptureService.latestSnapshot
+            if (previousRound != null && snapshot != null) {
+                assertEquals("Continuous recognition must keep the existing capture session",
+                    previousRound.captureSessionID, snapshot.captureSessionID)
+            }
             if (snapshot != null && snapshot !== last) {
                 last = snapshot
                 trace.observe(snapshot)
                 val outlook = snapshot.outlook
+                val isNextRound = previousRound == null || snapshot.hackID > previousRound.hackID
+                if (previousRound != null && isNextRound && !nextRoundStarted && snapshot.state == TrackingState.PRESENTING) {
+                    assertTrue("A new round must clear the previous confirmed prefix", outlook.observed.isEmpty())
+                    assertTrue("A new round must clear previous confirmed Glyphs", snapshot.slots.none { it.status == SlotObservation.Status.CONFIRMED })
+                    assertTrue("A new round must release the previous frozen input", !snapshot.isFrozen)
+                    nextRoundStarted = true
+                }
                 if (snapshot.state == TrackingState.PRESENTING &&
+                    isNextRound &&
                     outlook.observed.map { it.name } == expected.take(2)
                 ) {
                     assertEquals(PredictionState.RESOLVED, outlook.state)
@@ -418,8 +467,10 @@ class LiveCaptureRecognitionInstrumentedTest {
                     }
                 }
                 if (frozen == null && snapshot.state == TrackingState.INPUT &&
+                    isNextRound &&
                     !(ignoreStartupInput && snapshot.hackID == 0)
                 ) {
+                    if (previousRound != null) assertTrue("A new round must be observed presenting before its first input", nextRoundStarted)
                     assertTrue("First input must have predicted from its confirmed first two slots", snapshot.hackID in predictions)
                     assertEquals("First input must contain the complete recorded sequence", expected, snapshot.slots.map { it.glyph?.name })
                     assertTrue("Every slot must be confirmed at first input", snapshot.slots.all { it.status == SlotObservation.Status.CONFIRMED })
@@ -479,7 +530,10 @@ class LiveCaptureRecognitionInstrumentedTest {
                         }
                     } else null
                     Log.i(TAG, "$fileName hack ${current.hackID}: full sequence retained for three seconds; automatic stop=$stopsAfterRound")
-                    return AcceptedSession(predictions.getValue(current.hackID), frozen, SystemClock.elapsedRealtime() - startedAt, retainedResult)
+                    return AcceptedSession(
+                        predictions.getValue(current.hackID), frozen, SystemClock.elapsedRealtime() - startedAt,
+                        retainedResult, measurements.finish(),
+                    )
                 }
             }
             assertTrue("Live capture stopped unexpectedly: ${CaptureService.currentState}",
@@ -492,6 +546,36 @@ class LiveCaptureRecognitionInstrumentedTest {
                 "predicted hacks=${predictions.keys}; last=" +
                 "${last?.state} / ${last?.hackID} / ${last?.slots} / ${last?.outlook}",
         )
+    }
+
+    private class RoundMeasurements {
+        private val startedAt = SystemClock.elapsedRealtime()
+        private val cpuStarted = Process.getElapsedCpuTime()
+        private val framesStarted = CaptureService.frameCount
+        private val powerStarted = PowerMeter.shared.snapshot()
+
+        fun finish(): JSONObject {
+            val elapsed = SystemClock.elapsedRealtime() - startedAt
+            val cpu = Process.getElapsedCpuTime() - cpuStarted
+            val power = PowerMeter.shared.snapshot()
+            return JSONObject().apply {
+                put("elapsedMilliseconds", elapsed)
+                put("processCpuMilliseconds", cpu)
+                put("equivalentOneCoreCpuPercent", 100.0 * cpu / elapsed)
+                put("cpuScope", "Application and instrumentation process; fixture video plays in another process")
+                put("frameCountDelta", CaptureService.frameCount - framesStarted)
+                put("metrics", JSONObject().apply {
+                    for (metric in PowerMetric.entries) {
+                        val before = powerStarted.total(metric)
+                        val after = power.total(metric)
+                        put(metric.name, JSONObject().apply {
+                            put("count", after.count - before.count)
+                            put("nanoseconds", after.nanoseconds - before.nanoseconds)
+                        })
+                    }
+                })
+            }
+        }
     }
 
     /** Counts published source frames, not the tracker's private shape hypotheses. */
@@ -583,6 +667,7 @@ class LiveCaptureRecognitionInstrumentedTest {
                 put("observedPrefixAtPrediction", JSONArray(it.prediction.outlook.observed.map { glyph -> glyph.name }))
                 put("predictedSuffix", JSONArray(it.prediction.outlook.predictedSuffix.map { glyph -> glyph.name }))
                 put("inputFreeze", it.input.isFrozen)
+                put("roundMeasurements", it.measurements)
                 it.retainedResult?.let { retained -> put("retainedResult", retained) }
             }
             put("droppedStateSpans", trace.droppedSpans)
@@ -709,4 +794,3 @@ class LiveCaptureRecognitionInstrumentedTest {
         private val WHOLE_SCREEN_LABELS = setOf("共享整个屏幕", "整个屏幕", "Entire screen", "Share entire screen")
     }
 }
-

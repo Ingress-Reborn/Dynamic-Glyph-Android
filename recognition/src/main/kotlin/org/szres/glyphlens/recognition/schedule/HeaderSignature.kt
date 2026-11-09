@@ -55,11 +55,10 @@ class HeaderSignature(
             val left = floor(layout.contentLeft * image.width).toInt()
             val right = ceil(layout.contentRight * image.width).toInt()
             if (left < 0 || right > image.width || left >= right) return null
-            val stride = image.width * 3
             val rowBytes = (right - left) * 3
             val pixels = ByteArray(rowBytes * (last - first))
             for (row in first until last) {
-                image.pixels.copyInto(pixels, (row - first) * rowBytes, row * stride + left * 3, row * stride + right * 3)
+                image.copyRgbRow(row, left, right, pixels, (row - first) * rowBytes)
             }
             return HeaderSignature(
                 width = image.width,

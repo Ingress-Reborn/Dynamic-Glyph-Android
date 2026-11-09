@@ -45,7 +45,7 @@ class GlyphStrokeAccumulator(
     }
 
     private var evidence: List<GlyphEdgeEvidence> = emptyList()
-    private val inkPixels = linkedSetOf<Int>()
+    private val inkSamples = linkedSetOf<Int>()
     private var frames: List<GlyphFrameSummary> = emptyList()
     private var possibleBoundaryCrossing = false
 
@@ -81,7 +81,7 @@ class GlyphStrokeAccumulator(
                 )
             }
         }
-        inkPixels.addAll(observation.inkPixels)
+        inkSamples.addAll(observation.inkSamples)
         frames = frames + GlyphFrameSummary(
             observation.state,
             edges,
@@ -96,7 +96,7 @@ class GlyphStrokeAccumulator(
         try {
             if (frames.isEmpty()) return null
             return GlyphStrokeResult(
-                observation = recognizer.classify(evidence, calibration, inkPixels.toList()),
+                observation = recognizer.classify(evidence, calibration, inkSamples.toList()),
                 frames = frames,
                 completion = completion,
                 possibleBoundaryCrossing = possibleBoundaryCrossing,
@@ -108,7 +108,7 @@ class GlyphStrokeAccumulator(
 
     fun reset() {
         evidence = emptyList()
-        inkPixels.clear()
+        inkSamples.clear()
         frames = emptyList()
         possibleBoundaryCrossing = false
     }

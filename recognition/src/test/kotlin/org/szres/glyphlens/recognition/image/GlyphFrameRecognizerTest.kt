@@ -120,6 +120,80 @@ class GlyphFrameRecognizerTest {
     }
 
     @Test
+    fun fixedCalibrationReusesSparseSamplingPlanAcrossFrames() {
+        val recognizer = GlyphFrameRecognizer(pixelTestTable())
+        val blank = SyntheticRaster()
+        val fit = requireNotNull(NodeArrayDetector().detect(blank.image()))
+        assertEquals(GlyphFrameObservation.State.NO_STROKE, recognizer.observe(blank.image(), fit).state)
+        val samples = recognizer.lastSampleCount
+        assertTrue(samples > 0)
+        assertEquals(1, recognizer.samplingPlanBuildCount)
+
+        val drawn = blank.copy()
+        drawn.line(drawn.point(160.0, 130.0), drawn.point(160.0, 418.0))
+        repeat(3) {
+            assertEquals(listOf(id("clear")), recognizer.observe(drawn.image(), fit).exactMatches)
+            assertEquals(samples, recognizer.lastSampleCount)
+            assertEquals(1, recognizer.samplingPlanBuildCount)
+        }
+
+        val shifted = SyntheticRaster(offset = GlyphPoint(3.0, 7.0))
+        val shiftedFit = requireNotNull(NodeArrayDetector().detect(shifted.image()))
+        assertEquals(GlyphFrameObservation.State.NO_STROKE, recognizer.observe(shifted.image(), shiftedFit).state)
+        assertEquals(2, recognizer.samplingPlanBuildCount)
+    }
+
+    @Test
+    fun pixelReadsStaySparseAcrossArraySizes() {
+        for (scale in listOf(0.6, 1.0, 1.6, 2.5)) {
+            val canvas = SyntheticRaster(scale)
+            val fit = requireNotNull(NodeArrayDetector().detect(canvas.image()))
+            canvas.line(canvas.point(160.0, 130.0), canvas.point(160.0, 418.0))
+            val recognizer = GlyphFrameRecognizer(pixelTestTable())
+            assertEquals(GlyphFrameObservation.State.UNIQUE_VISIBLE_SHAPE, recognizer.observe(canvas.image(), fit).state)
+            assertTrue("$scale: ${recognizer.lastSampleCount} pixel reads", recognizer.lastSampleCount < fit.size.x * fit.size.y / 2)
+        }
+    }
+
+    @Test
+    fun smallPartialStrokesStayVisibleBetweenGuardSamples() {
+        for (scale in listOf(0.6, 1.0, 1.6)) {
+            val blank = SyntheticRaster(scale)
+            val fit = requireNotNull(NodeArrayDetector().detect(blank.image()))
+            val recognizer = GlyphFrameRecognizer(pixelTestTable())
+            for (offset in 0..5) {
+                val canvas = blank.copy()
+                canvas.line(canvas.point(160.0 + offset, 170.0), canvas.point(160.0 + offset, 195.0))
+                val result = recognizer.observe(canvas.image(), fit)
+                assertEquals("scale=$scale offset=$offset", GlyphFrameObservation.State.UNRECOGNIZED_STROKE, result.state)
+                assertTrue(result.edges.isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun offLatticeInkIsRejectedAcrossArraySizesAndPositions() {
+        for (scale in listOf(0.6, 1.0, 1.6)) {
+            val blank = SyntheticRaster(scale, GlyphPoint(-9.0, 17.0))
+            val fit = requireNotNull(NodeArrayDetector().detect(blank.image()))
+            val recognizer = GlyphFrameRecognizer(pixelTestTable())
+            for (offset in listOf(0.0, 2.0, 5.0)) {
+                val canvas = blank.copy()
+                canvas.line(canvas.point(160.0, 130.0), canvas.point(160.0, 418.0))
+                for (y in 170..190) {
+                    canvas.line(canvas.point(60.0 + offset, y.toDouble()), canvas.point(135.0 + offset, y.toDouble()))
+                    canvas.line(canvas.point(185.0 - offset, y + 190.0), canvas.point(260.0 - offset, y + 190.0))
+                }
+                val result = recognizer.observe(canvas.image(), fit)
+                assertEquals(listOf(id("clear")), result.exactMatches)
+                assertEquals("scale=$scale offset=$offset", GlyphFrameObservation.State.UNEXPLAINED_INK, result.state)
+                assertFalse(result.hasUniqueVisibleShape)
+                assertTrue(result.unexplainedInkPixelCount > result.strokePixelCount / 2)
+            }
+        }
+    }
+
+    @Test
     fun sameShapeAliasesRemainAmbiguous() {
         val path = requireNotNull(GlyphPath.fromEncoded("05a"))
         val recognizer = GlyphFrameRecognizer(GlyphTable(mapOf(id("a") to path, id("b") to path)))

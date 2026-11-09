@@ -7,6 +7,7 @@ import org.szres.glyphlens.recognition.GlyphID
 import org.szres.glyphlens.recognition.SequenceOutlook
 import org.szres.glyphlens.recognition.SequencePredictor
 import org.szres.glyphlens.recognition.image.GlyphFrameObservation
+import org.szres.glyphlens.recognition.image.NodeArrayDetection
 import org.szres.glyphlens.recognition.outlook
 import java.util.Locale
 
@@ -24,6 +25,7 @@ class PresentationSnapshotFactory(
         sourceTime: Double,
         liveness: CaptureLiveness = CaptureLiveness.LIVE,
         acceptance: AcceptanceMode = AcceptanceMode.TrackingSequence,
+        calibration: NodeArrayDetection? = observation?.calibration,
     ): GlyphDisplaySnapshot {
         val prefix = tracker.confirmedPrefix
         val expected = tracker.expectedSlotCount
@@ -41,7 +43,6 @@ class PresentationSnapshotFactory(
         } else {
             null
         }
-        val calibration = observation?.calibration
         val calibrationSummary = calibration?.let {
             String.format(
                 Locale.ROOT,

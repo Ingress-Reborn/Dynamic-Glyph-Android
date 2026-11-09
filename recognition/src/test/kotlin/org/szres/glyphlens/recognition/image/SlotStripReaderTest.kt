@@ -10,6 +10,99 @@ class SlotStripReaderTest {
     private val reader = SlotStripReader()
 
     @Test
+    fun calibratedMarkersReadEachNewHighlightWithFewerPixelSamples() {
+        reader.read(SyntheticSlotBands.outlinedBoxes().band()).getOrThrow()
+        val initialPixels = reader.lastPixelReadCount
+        assertFalse(reader.usedCachedMarkers)
+
+        for (highlight in listOf(0, 1, 2, 3, null)) {
+            val reading = reader.read(SyntheticSlotBands.outlinedBoxes(highlighted = highlight).band()).getOrThrow()
+            assertEquals(4, reading.slotCount)
+            assertEquals(highlight, reading.highlightedIndex)
+            assertTrue("Unchanged marker geometry should reuse its calibrated samples", reader.usedCachedMarkers)
+            assertTrue("Cached reading must use substantially fewer actual pixel reads", reader.lastPixelReadCount < initialPixels / 3)
+        }
+    }
+
+    @Test
+    fun disappearingMarkersDoNotReuseThePreviousReading() {
+        reader.read(SyntheticSlotBands.outlinedBoxes(highlighted = 2).band()).getOrThrow()
+        val absent = reader.read(SyntheticSlotBands.Canvas().band())
+        assertEquals(SlotStripRejection.NoMarkers, absent.exceptionOrNull())
+        assertFalse(reader.usedCachedMarkers)
+
+        val restored = reader.read(SyntheticSlotBands.outlinedBoxes(highlighted = 1).band()).getOrThrow()
+        assertEquals(4, restored.slotCount)
+        assertEquals(1, restored.highlightedIndex)
+    }
+
+    @Test
+    fun movingTheMarkersReplacesTheirCachedCoordinates() {
+        val original = reader.read(SyntheticSlotBands.outlinedBoxes().band()).getOrThrow()
+        val moved = reader.read(
+            SyntheticSlotBands.outlinedBoxes(lefts = listOf(125, 221, 317, 413), highlighted = 3).band(),
+        ).getOrThrow()
+        assertEquals(4, moved.slotCount)
+        assertEquals(3, moved.highlightedIndex)
+        assertFalse(reader.usedCachedMarkers)
+        for (index in original.markerCentersX.indices) {
+            assertEquals(8.0 / SyntheticSlotBands.WIDTH, moved.markerCentersX[index] - original.markerCentersX[index], 0.0001)
+        }
+        reader.read(SyntheticSlotBands.outlinedBoxes(lefts = listOf(125, 221, 317, 413)).band()).getOrThrow()
+        assertTrue(reader.usedCachedMarkers)
+    }
+
+    @Test
+    fun addedMarkersBesideACachedSingleSlotCannotKeepTheOldSlotCount() {
+        val single = SyntheticSlotBands.singleMarker()
+        reader.read(single).getOrThrow()
+        val expanded = SyntheticSlotBands.Canvas()
+        single.image.pixels.copyInto(expanded.pixels)
+        for (y in 150 until 220) {
+            for (x in 266 until 336) {
+                val source = (y * SyntheticSlotBands.WIDTH + x) * 3
+                for (shift in listOf(-96, 96)) {
+                    val destination = (y * SyntheticSlotBands.WIDTH + x + shift) * 3
+                    repeat(3) { expanded.pixels[destination + it] = single.image.pixels[source + it] }
+                }
+            }
+        }
+
+        val reading = reader.read(expanded.band()).getOrThrow()
+        assertEquals(3, reading.slotCount)
+        assertNull(reading.highlightedIndex)
+        assertFalse(reader.usedCachedMarkers)
+    }
+
+    @Test
+    fun aNewWindowOverCachedMarkersStillRejectsTheCoveredStrip() {
+        reader.read(SyntheticSlotBands.outlinedBoxes(highlighted = 2).band()).getOrThrow()
+        assertEquals(
+            SlotStripRejection.CoveredByOverlay,
+            reader.read(SyntheticSlotBands.windowOverStrip()).exceptionOrNull(),
+        )
+        assertFalse(reader.usedCachedMarkers)
+    }
+
+    @Test
+    fun timerSamplesFollowAppearanceColorChangesDisappearanceAndMovedTrack() {
+        assertFalse(reader.hasTimerBar(SyntheticSlotBands.outlinedBoxes().band()))
+        assertTrue(reader.hasTimerBar(SyntheticSlotBands.timer()))
+        assertTrue(reader.hasTimerBar(SyntheticSlotBands.timer(magentaProgress = true)))
+        assertFalse(reader.hasTimerBar(SyntheticSlotBands.outlinedBoxes().band()))
+
+        val original = SyntheticSlotBands.timer(magentaProgress = true)
+        val moved = SyntheticSlotBands.outlinedBoxes(highlighted = 0)
+        for (y in 300 until 303) {
+            val source = y * SyntheticSlotBands.WIDTH * 3
+            val destination = (y + 10) * SyntheticSlotBands.WIDTH * 3
+            original.image.pixels.copyInto(moved.pixels, destination, source, source + SyntheticSlotBands.WIDTH * 3)
+        }
+        assertTrue(reader.hasTimerBar(moved.band()))
+        assertFalse(reader.hasTimerBar(SyntheticSlotBands.Canvas().band()))
+    }
+
+    @Test
     fun syntheticBannerLeavesFourIndicatorsReadable() {
         val reading = reader.read(SyntheticSlotBands.banner(175)).getOrThrow()
         assertEquals(4, reading.slotCount)
@@ -71,6 +164,7 @@ class SlotStripReaderTest {
 
     @Test
     fun multipleHighlightsAreNotGuessedAt() {
+        reader.read(SyntheticSlotBands.outlinedBoxes().band()).getOrThrow()
         val canvas = SyntheticSlotBands.outlinedBoxes(highlighted = 0)
         // Add a second independently drawn gold outline to the selected first one.
         val goldCanvas = SyntheticSlotBands.outlinedBoxes(highlighted = 1)

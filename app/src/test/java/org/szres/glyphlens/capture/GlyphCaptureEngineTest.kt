@@ -12,6 +12,7 @@ import org.szres.glyphlens.recognition.CaptureSessionID
 import org.szres.glyphlens.recognition.GlyphID
 import org.szres.glyphlens.recognition.GlyphPath
 import org.szres.glyphlens.recognition.GlyphTable
+import org.szres.glyphlens.recognition.PhaseSource
 import org.szres.glyphlens.recognition.RgbaFrame
 import org.szres.glyphlens.recognition.TrackingState
 import org.szres.glyphlens.recognition.image.AnalysisRateController
@@ -119,13 +120,17 @@ class GlyphCaptureEngineTest {
     }
 
     @Test
-    fun establishedPixelPhasesKeepTheIosHeaderCadence() {
+    fun presentationKeepsHeaderCadenceAndTimerProvenInputSkipsGlyphAndOcrWork() {
         val submissions = mutableListOf<GameTextSchedule.Request>()
+        val meter = PowerMeter().apply { reset() }
         var phase = GamePhase.presenting
-        fixture(operation = GameOcrOperation { work ->
-            submissions += work.request
-            GameOcrOutcome(header = HeaderReading(phase, phase.rawValue, 1.0, work.request.sourceTime))
-        }).use { engine ->
+        fixture(
+            meter = meter,
+            operation = GameOcrOperation { work ->
+                submissions += work.request
+                GameOcrOutcome(header = HeaderReading(phase, phase.rawValue, 1.0, work.request.sourceTime))
+            },
+        ).use { engine ->
             engine.process(glyphScreen(1.0, rings = true, slot = true), power)
             engine.process(glyphScreen(1.05, rings = true, slot = true), power)
             for (step in 1..8) {
@@ -137,16 +142,71 @@ class GlyphCaptureEngineTest {
                 assertEquals(0.11, current.sourceTime - previous.sourceTime, 1e-8)
             }
 
-            phase = GamePhase.input
+            val lastPresentationRead = submissions.last().sourceTime
             engine.process(glyphScreen(2.0, rings = true, slot = true, timer = true), power)
-            engine.process(glyphScreen(2.05, rings = true, slot = true, timer = true), power)
             assertEquals(TrackingState.INPUT, engine.latest.state)
+            assertEquals(PhaseSource.INPUT_TIMER, engine.latest.phaseSource)
             assertTrue(engine.latest.isFrozen)
+            val frozen = engine.latest
             val beforeInputReads = submissions.size
-            for (step in 1..4) {
-                engine.process(glyphScreen(2.0 + step * 0.11, rings = true, slot = true, timer = true), power)
+            val sampledMetrics = listOf(PowerMetric.FRAMES_ANALYSED, PowerMetric.GLYPH_READ, PowerMetric.GRID_HUNT)
+            val beforeInputCounts = sampledMetrics.associateWith { meter.snapshot().total(it).count }
+            for (at in listOf(2.05, 2.11, 2.22, 2.33, 2.44, 2.55, 2.66)) {
+                engine.process(glyphScreen(at, rings = true, slot = true, timer = true), power)
+                assertEquals(TrackingState.INPUT, engine.latest.state)
+                assertEquals(PhaseSource.INPUT_TIMER, engine.latest.phaseSource)
+                assertTrue(engine.latest.isFrozen)
+                assertEquals(frozen.hackID, engine.latest.hackID)
+                assertEquals(frozen.slots, engine.latest.slots)
+                assertEquals(at, engine.latest.sourceFrameTime, 1e-8)
             }
-            assertEquals(beforeInputReads + 4, submissions.size)
+            assertEquals("Current timer pixels keep input live without OCR", beforeInputReads, submissions.size)
+            assertEquals(lastPresentationRead, submissions.last().sourceTime, 0.0)
+            val afterInputCounts = sampledMetrics.associateWith { meter.snapshot().total(it).count }
+            assertEquals(beforeInputCounts.getValue(PowerMetric.FRAMES_ANALYSED) + 7,
+                afterInputCounts.getValue(PowerMetric.FRAMES_ANALYSED))
+            for (metric in listOf(PowerMetric.GLYPH_READ, PowerMetric.GRID_HUNT)) {
+                assertEquals("Frozen input must skip $metric", beforeInputCounts.getValue(metric),
+                    afterInputCounts.getValue(metric))
+            }
+
+            phase = GamePhase.input
+            engine.process(glyphScreen(2.8, rings = true, slot = true), power)
+            assertEquals(TrackingState.INPUT, engine.latest.state)
+            assertEquals(PhaseSource.RETAINED, engine.latest.phaseSource)
+            assertEquals("Losing the timer must resume OCR immediately", beforeInputReads + 1, submissions.size)
+            assertEquals(2.8, submissions.last().sourceTime, 1e-8)
+            assertEquals(afterInputCounts.getValue(PowerMetric.GLYPH_READ) + 1,
+                meter.snapshot().total(PowerMetric.GLYPH_READ).count)
+            assertTrue(engine.latest.isFrozen)
+            assertEquals(frozen.slots, engine.latest.slots)
+
+            engine.process(glyphScreen(2.91, rings = true, slot = true), power)
+            assertEquals(PhaseSource.HEADER_TEXT, engine.latest.phaseSource)
+            assertEquals(beforeInputReads + 2, submissions.size)
+            assertEquals(2.91, submissions.last().sourceTime, 1e-8)
+            assertEquals(frozen.slots, engine.latest.slots)
+        }
+    }
+
+    @Test
+    fun constrainedPresentationKeepsTheTwoHundredMillisecondHeaderInterval() {
+        val submissions = mutableListOf<GameTextSchedule.Request>()
+        val constrained = PowerConditions.State(lowPowerMode = true, thermalStatus = 0)
+        fixture(operation = GameOcrOperation { work ->
+            submissions += work.request
+            GameOcrOutcome(header = HeaderReading(GamePhase.presenting, "GLYPH SEQUENCE", 1.0, work.request.sourceTime))
+        }).use { engine ->
+            engine.process(glyphScreen(1.0, rings = true, slot = true), constrained)
+            engine.process(glyphScreen(1.05, rings = true, slot = true), constrained)
+            for (step in 1..8) {
+                engine.process(glyphScreen(1.0 + step * 0.11, rings = true, slot = true, highlighted = true), constrained)
+            }
+            assertEquals(TrackingState.PRESENTING, engine.latest.state)
+            assertEquals(5, submissions.size)
+            for ((previous, current) in submissions.zipWithNext()) {
+                assertEquals(0.22, current.sourceTime - previous.sourceTime, 1e-8)
+            }
         }
     }
 
