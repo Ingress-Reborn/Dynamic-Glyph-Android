@@ -79,6 +79,10 @@ class MainActivity : ComponentActivity() {
         if (result.resultCode == Activity.RESULT_OK && data != null) {
             projectionResultCode = result.resultCode
             projectionData = data
+            // Hand the *original* Intent object to the service in-process.
+            // Do not parcel it through startForegroundService().
+            GlyphCaptureService.pendingResultCode = result.resultCode
+            GlyphCaptureService.pendingResultData = data
             startCaptureService()
         } else {
             toast(getString(R.string.permission_capture_required))
@@ -424,7 +428,9 @@ class MainActivity : ComponentActivity() {
         val intent = Intent(this, GlyphCaptureService::class.java).apply {
             action = GlyphCaptureService.ACTION_START
             putExtra(GlyphCaptureService.EXTRA_RESULT_CODE, projectionResultCode)
-            putExtra(GlyphCaptureService.EXTRA_RESULT_DATA, projectionData)
+            // EXTRA_RESULT_DATA intentionally omitted: the consent Intent is
+            // handed over in-process to avoid a parcel round trip (see
+            // GlyphCaptureService.pendingResultData).
             putExtra(GlyphCaptureService.EXTRA_GLYPH_CSV, glyph)
             putExtra(GlyphCaptureService.EXTRA_SEQUENCE_CSV, sequence)
         }

@@ -188,33 +188,66 @@ class CaptureEngine(
             }
         }, handler)
 
-        val display = try {
-            mediaProjection.createVirtualDisplay(
-                VIRTUAL_DISPLAY_NAME,
-                width,
-                height,
-                metrics.densityDpi,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                reader.surface,
-                null,
-                handler
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "createVirtualDisplay failed", e)
+        // Android 14+ expects a registered callback; without one some OEMs stop
+        // the projection immediately and createVirtualDisplay throws.
+        mediaProjection.registerCallback(object : MediaProjection.Callback() {
+            override fun onStop() {
+                Log.w(TAG, "MediaProjection stopped by the system")
+                capturing = false
+            }
+        }, handler)
+
+        // The foreground-service type is not visible to MediaProjectionManager
+        // instantly on every OEM build, so the first attempt can fail with a
+        // SecurityException even though the service already called
+        // startForeground(). Retry briefly before giving up.
+        var display: VirtualDisplay? = null
+        var lastError: Exception? = null
+        for (attempt in 1..3) {
+            try {
+                display = mediaProjection.createVirtualDisplay(
+                    VIRTUAL_DISPLAY_NAME,
+                    width,
+                    height,
+                    metrics.densityDpi,
+                    DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                    reader.surface,
+                    null,
+                    null
+                )
+            } catch (e: Exception) {
+                lastError = e
+                Log.w(TAG, "createVirtualDisplay attempt $attempt failed: $e")
+            }
+            if (display != null) break
+            if (attempt < 3) {
+                try {
+                    Thread.sleep(300)
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
+                }
+            }
+        }
+
+        if (display == null) {
             reader.close()
             thread.quitSafely()
             mediaProjection.stop()
-            return "无法开始录屏：${e.javaClass.simpleName}\n${e.message ?: ""}"
-        }
-        if (display == null) {
+            val error = lastError
+            if (error != null) {
+                Log.e(TAG, "createVirtualDisplay failed after 3 attempts", error)
+                // Show the actual exception. "Unable to start capture" alone is
+                // not actionable; the class name tells us whether this is a
+                // consumed consent token, a missing FGS type, or an OEM limit.
+                val detail = "${error.javaClass.simpleName}: ${error.message ?: "无详情"}"
+                return "无法开始录屏\n$detail\n请把上面这行发给我"
+            }
             // HyperOS and some OEM builds refuse the virtual display without
             // throwing. Treating that as success produced a live service with no
             // frames and an overlay nobody could see.
-            Log.e(TAG, "createVirtualDisplay returned null")
-            reader.close()
-            thread.quitSafely()
-            mediaProjection.stop()
-            return "系统拒绝了录屏（虚拟显示器为空）\n请检查电池权限与后台弹出界面权限"
+            Log.e(TAG, "createVirtualDisplay returned null after 3 attempts")
+            return "系统拒绝了录屏（虚拟显示器为空）\n请重新授权一次，并确认电池权限无限制"
         }
 
         projection = mediaProjection

@@ -40,6 +40,23 @@ class GlyphCaptureService : Service() {
         @Volatile
         var isRunning: Boolean = false
             private set
+
+        /**
+         * The MediaProjection consent Intent, handed over in-process.
+         *
+         * Passing it as an Intent extra through `startForegroundService()` makes
+         * it travel through system_server and back (parcel -> unparcel -> parcel).
+         * Since Android 14 the consent token is single-use and the system binds
+         * it to the component that consumes it; a round trip like that is a
+         * common cause of `createVirtualDisplay()` throwing SecurityException on
+         * HyperOS / Android 15. Activity and service are in the same process, so
+         * the original Intent object can simply be handed over here.
+         */
+        @Volatile
+        var pendingResultData: Intent? = null
+
+        @Volatile
+        var pendingResultCode: Int = 0
     }
 
     private var captureEngine: CaptureEngine? = null
@@ -83,9 +100,13 @@ class GlyphCaptureService : Service() {
             return
         }
 
-        val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
+        // Prefer the in-process Intent. The extra is kept only as a fallback
+        // for builds that still pass it the old way.
+        val resultCode = GlyphCaptureService.pendingResultCode
+            .takeIf { it != 0 } ?: intent.getIntExtra(EXTRA_RESULT_CODE, 0)
         @Suppress("DEPRECATION")
-        val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
+        val resultData = GlyphCaptureService.pendingResultData
+            ?: intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
         if (resultData == null) {
             reportStatus("启动失败：没有拿到系统截屏授权\n请回 App 重新点「开始截屏」")
             return
