@@ -225,14 +225,23 @@ public final class ReleaseUiCaptureInstrumentedTest {
         String id = powerSaving ? "powerSavingModeButton" : "realtimeModeButton";
         AccessibilityNodeInfo mode = awaitNode(id, 5_000);
         if (!mode.isChecked()) click(mode);
-        assertTrue("The selected recognition mode must be checked", awaitNode(id, 5_000).isChecked());
+        awaitCheckedState(id, true);
     }
 
     private void selectAutoStop(boolean autoStop) {
         AccessibilityNodeInfo control = awaitNode("autoStopSwitch", 5_000);
         if (control.isChecked() != autoStop) click(control);
-        assertEquals("Automatic stopping must match the selected setting", autoStop,
-                awaitNode("autoStopSwitch", 5_000).isChecked());
+        awaitCheckedState("autoStopSwitch", autoStop);
+    }
+
+    private void awaitCheckedState(String id, boolean expected) {
+        long deadline = SystemClock.elapsedRealtime() + 5_000;
+        while (SystemClock.elapsedRealtime() < deadline) {
+            AccessibilityNodeInfo control = findAppNode(id);
+            if (control != null && control.isChecked() == expected) return;
+            SystemClock.sleep(50);
+        }
+        throw new AssertionError("Control " + id + " did not become checked=" + expected);
     }
 
     private void awaitRecognitionPanel() {
