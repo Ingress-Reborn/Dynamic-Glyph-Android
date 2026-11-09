@@ -30,14 +30,13 @@ import org.szres.glyphlens.diagnostics.PowerMetric
 import org.szres.glyphlens.overlay.OverlayController
 import org.szres.glyphlens.recognition.CaptureSessionID
 import org.szres.glyphlens.recognition.GlyphDisplaySnapshot
-import org.szres.glyphlens.recognition.TrackingState
 import org.szres.glyphlens.settings.AppPreferences
 import org.szres.glyphlens.settings.RecognitionMode
 import org.szres.glyphlens.tables.TableController
 import org.szres.glyphlens.ui.MainActivity
 
 class CaptureService : Service() {
-    enum class SessionState { STOPPED, STANDBY, STARTING, RUNNING, RESULT_READY, STOPPING }
+    enum class SessionState { STOPPED, STANDBY, STARTING, RUNNING, STOPPING }
 
     private lateinit var captureThread: HandlerThread
     private lateinit var handler: Handler
@@ -62,6 +61,9 @@ class CaptureService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
     private var reader: ImageReader? = null
     private var captureSize: CaptureSize? = null
+    private val overlayVisibility = RealtimeOverlayVisibility()
+    private var recognitionMode = RecognitionMode.REALTIME
+    private var hidesAfterDrawing = false
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
@@ -96,18 +98,22 @@ class CaptureService : Service() {
         mainHandler = Handler(Looper.getMainLooper())
         displayManager = getSystemService(DisplayManager::class.java)
         preferences = AppPreferences(this)
+        recognitionMode = preferences.recognitionMode
+        hidesAfterDrawing = preferences.hidesAfterDrawing
         PowerMeter.sharedAndroidGauges.attach(this)
         tables = TableController(this).apply { loadStored() }
         powerConditions = PowerConditions(this)
         overlay = OverlayController(
             this,
             onStartRecognition = { handler.post { resumeRecognition() } },
-            onClose = { handler.post { pauseRecognition() } },
+            onClose = { handler.post { closeOverlay() } },
         )
         preferenceStore = getSharedPreferences("glyph-lens", MODE_PRIVATE)
         preferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == "display.floatingWindow") {
-                if (preferences.showsFloatingWindow) showOverlay() else hideOverlay()
+                handler.post {
+                    if (preferences.showsFloatingWindow) showOverlay() else hideOverlay()
+                }
             }
         }
         preferenceStore.registerOnSharedPreferenceChangeListener(preferenceListener)
@@ -128,8 +134,8 @@ class CaptureService : Service() {
             ACTION_STOP -> handler.post { stopSession(getString(R.string.status_capture_stopped)) }
             ACTION_RESUME_RECOGNITION -> handler.post { resumeRecognition() }
             ACTION_PAUSE_RECOGNITION -> handler.post { pauseRecognition() }
-            ACTION_HIDE_OVERLAY -> hideOverlay()
-            ACTION_SHOW_OVERLAY -> showOverlay()
+            ACTION_HIDE_OVERLAY -> handler.post { hideOverlay() }
+            ACTION_SHOW_OVERLAY -> handler.post { showOverlay() }
         }
         return START_NOT_STICKY
     }
@@ -138,6 +144,7 @@ class CaptureService : Service() {
 
     override fun onDestroy() {
         preferenceStore.unregisterOnSharedPreferenceChangeListener(preferenceListener)
+        overlayVisibility.hide(null)
         overlay.hide()
         isOverlayVisible = false
         PowerMeter.shared.end()
@@ -153,11 +160,14 @@ class CaptureService : Service() {
 
     private fun startSession(resultCode: Int, data: Intent?) {
         if (currentState != SessionState.STOPPED) return
+        recognitionMode = preferences.recognitionMode
+        hidesAfterDrawing = preferences.hidesAfterDrawing
         currentState = SessionState.STARTING
         PowerMeter.shared.reset()
         PowerMeter.shared.end()
         frameCount = 0
         latestSnapshot = null
+        overlayVisibility.reset()
         sourceMonitor = CaptureSourceMonitor()
         frameAdmission = CaptureFrameAdmission()
         projectedContentSize = null
@@ -188,7 +198,7 @@ class CaptureService : Service() {
             displayManager.registerDisplayListener(displayListener, handler)
             displayListenerRegistered = true
             currentState = SessionState.STANDBY
-            if (preferences.recognitionMode == RecognitionMode.POWER_SAVING) {
+            if (recognitionMode == RecognitionMode.POWER_SAVING) {
                 preferences.showsFloatingWindow = true
                 updateNotification()
                 publishState()
@@ -204,7 +214,7 @@ class CaptureService : Service() {
     }
 
     private fun resumeRecognition() {
-        if (currentState != SessionState.STANDBY && currentState != SessionState.RESULT_READY) return
+        if (currentState != SessionState.STANDBY) return
         val display = virtualDisplay ?: return
         val size = captureSize ?: return
         currentState = SessionState.STARTING
@@ -214,6 +224,7 @@ class CaptureService : Service() {
         frameCount = 0
         latestSnapshot = null
         lastRenderKey = null
+        overlayVisibility.reset()
         PowerMeter.shared.reset()
         try {
             val engine = GlyphCaptureEngine(
@@ -229,7 +240,8 @@ class CaptureService : Service() {
             updateNotification()
             publishSnapshot(engine.latest)
             publishState()
-            showOverlay()
+            if (recognitionMode == RecognitionMode.POWER_SAVING && !hidesAfterDrawing) showOverlay()
+            else hideOverlay()
         } catch (_: SecurityException) {
             stopSession(getString(R.string.status_start_failed))
         } catch (_: IllegalStateException) {
@@ -238,7 +250,7 @@ class CaptureService : Service() {
     }
 
     private fun pauseRecognition() {
-        if (!isRecognizing && currentState != SessionState.RESULT_READY) return
+        if (!isRecognizing) return
         currentState = SessionState.STANDBY
         sessionGeneration++
         releaseRecognition()
@@ -250,6 +262,11 @@ class CaptureService : Service() {
         showOverlay()
     }
 
+    private fun closeOverlay() {
+        if (recognitionMode == RecognitionMode.REALTIME) hideOverlay()
+        else pauseRecognition()
+    }
+
     private fun createReader(size: CaptureSize): ImageReader =
         ImageReader.newInstance(size.width, size.height, PixelFormat.RGBA_8888, 2).apply {
             setOnImageAvailableListener(::onImageAvailable, handler)
@@ -257,7 +274,7 @@ class CaptureService : Service() {
 
     private fun onImageAvailable(source: ImageReader) {
         if (source !== reader || !isRecognizing) return
-        val roundFinished = source.acquireLatestImage()?.use { image ->
+        source.acquireLatestImage()?.use { image ->
             val arrival = SystemClock.elapsedRealtimeNanos()
             val metadata = sourceMonitor.observe(image.timestamp, arrival)
             frameCount++
@@ -265,7 +282,7 @@ class CaptureService : Service() {
             if (!frameAdmission.accept(image.timestamp, metadata)) {
                 PowerMeter.shared.count(PowerMetric.FRAMES_DELIVERED)
                 PowerMeter.shared.finish(PowerMetric.SKIPPED_FRAME, arrival)
-                return@use false
+                return@use
             }
             val plane = image.planes.single()
             val frame = try {
@@ -276,32 +293,17 @@ class CaptureService : Service() {
                 ).also { PowerMeter.shared.finish(PowerMetric.CAPTURE_COPY, copyStarted) }
             } catch (_: IllegalArgumentException) {
                 stopSession(getString(R.string.status_start_failed))
-                return@use false
+                return@use
             }
             PowerMeter.shared.noteMemory(PowerMemoryKind.RGBA_FRAME, frame.pixels.size.toLong())
             val captured = CapturedFrame(frame, metadata.status, arrival, metadata.continuityBroken)
-            val snapshot = captureEngine?.process(captured, powerConditions.current) ?: return@use false
+            val snapshot = captureEngine?.process(captured, powerConditions.current) ?: return@use
             publishSnapshot(snapshot, arrival)
             if (currentState == SessionState.STARTING) {
                 currentState = SessionState.RUNNING
                 publishState()
             }
-            // A fresh session can see the previous round's input screen before observing any presentation.
-            preferences.stopsAfterRound && snapshot.hackID > 0 && snapshot.isFrozen &&
-                snapshot.state == TrackingState.INPUT
-        } ?: false
-        if (roundFinished) finishRecognitionRound()
-    }
-
-    private fun finishRecognitionRound() {
-        currentState = SessionState.RESULT_READY
-        sessionGeneration++
-        releaseRecognition()
-        PowerMeter.shared.end()
-        lastRenderKey = null
-        updateNotification()
-        publishState()
-        showOverlay()
+        }
     }
 
     private fun resizeCapture(size: CaptureSize) {
@@ -331,15 +333,22 @@ class CaptureService : Service() {
     private fun publishSnapshot(snapshot: GlyphDisplaySnapshot, sourceArrivalNanos: Long? = null) {
         latestSnapshot = snapshot
         val engine = captureEngine ?: return
+        val uptime = SystemClock.elapsedRealtimeNanos() / 1_000_000_000.0
+        if ((recognitionMode == RecognitionMode.REALTIME || hidesAfterDrawing) && preferences.showsFloatingWindow &&
+            overlayVisibility.observe(snapshot, uptime, hidesAfterDrawing)
+        ) {
+            if (overlayVisibility.wantsWindow) showOverlay(automatically = true) else removeOverlay()
+            return
+        }
+        if (!overlayVisibility.wantsWindow) return
         val generation = sessionGeneration
         scheduleOverlayRefresh(snapshot, engine, generation)
-        val uptime = SystemClock.elapsedRealtimeNanos() / 1_000_000_000.0
         val geometry = engine.overlayGameGeometry
         val key = OverlayDisplayRefresh.renderKey(snapshot, uptime) + geometry
         if (key == lastRenderKey) return
         lastRenderKey = key
         mainHandler.post {
-            if (generation != sessionGeneration || captureEngine !== engine) return@post
+            if (generation != sessionGeneration || captureEngine !== engine || !overlayVisibility.wantsWindow) return@post
             val started = PowerMeter.shared.now()
             // A deadline re-render changes display uptime only, never the source evidence time.
             overlay.updateGameGeometry(geometry)
@@ -361,14 +370,14 @@ class CaptureService : Service() {
     ) {
         overlayRefresh?.let(handler::removeCallbacks)
         overlayRefresh = null
-        if (currentState != SessionState.STARTING && currentState != SessionState.RUNNING) return
+        if (!overlayVisibility.wantsWindow || !isRecognizing) return
         val uptime = SystemClock.elapsedRealtimeNanos() / 1_000_000_000.0
         val delay = OverlayDisplayRefresh.nextDelayMillis(snapshot, uptime) ?: return
         val refresh = object : Runnable {
             override fun run() {
                 if (overlayRefresh === this) overlayRefresh = null
                 if (generation != sessionGeneration || captureEngine !== engine) return
-                if (currentState != SessionState.STARTING && currentState != SessionState.RUNNING) return
+                if (!overlayVisibility.wantsWindow || !isRecognizing) return
                 publishSnapshot(snapshot)
             }
         }
@@ -377,41 +386,64 @@ class CaptureService : Service() {
     }
 
     private fun hideOverlay() {
+        overlayVisibility.hide(latestSnapshot)
+        removeOverlay()
+    }
+
+    private fun removeOverlay() {
+        overlayRefresh?.let(handler::removeCallbacks)
+        overlayRefresh = null
+        lastRenderKey = null
         mainHandler.post {
+            if (overlayVisibility.wantsWindow) return@post
             overlay.hide()
             isOverlayVisible = false
+            updateNotification()
             publishState(getString(
                 when (currentState) {
                     SessionState.STANDBY -> R.string.status_standby_hidden
-                    SessionState.RESULT_READY -> R.string.status_result_ready_hidden
+                    SessionState.RUNNING, SessionState.STARTING ->
+                        if ((recognitionMode == RecognitionMode.REALTIME || hidesAfterDrawing) && preferences.showsFloatingWindow) {
+                            R.string.status_running_hidden
+                        } else R.string.status_overlay_hidden
                     else -> R.string.status_overlay_hidden
                 },
             ))
         }
     }
 
-    private fun showOverlay() {
+    private fun showOverlay(automatically: Boolean = false) {
+        if (!isRecognizing && currentState != SessionState.STANDBY) return
+        if (!preferences.showsFloatingWindow) {
+            hideOverlay()
+            return
+        }
+        overlayVisibility.show()
+        lastRenderKey = null
+        val generation = sessionGeneration
+        val snapshot = latestSnapshot
+        val engine = captureEngine
+        val geometry = engine?.overlayGameGeometry
+        if (engine != null && snapshot != null) scheduleOverlayRefresh(snapshot, engine, generation)
         mainHandler.post {
-            if (!isRecognizing && currentState != SessionState.STANDBY && currentState != SessionState.RESULT_READY) return@post
-            if (!preferences.showsFloatingWindow) {
-                overlay.hide()
-                isOverlayVisible = false
-                publishState()
-                return@post
-            }
+            if (generation != sessionGeneration || !overlayVisibility.wantsWindow) return@post
+            if (!isRecognizing && currentState != SessionState.STANDBY) return@post
             try {
+                if (automatically) overlay.resetAutomaticPlacement()
+                overlay.updateGameGeometry(geometry)
                 when (currentState) {
                     SessionState.STANDBY -> {
-                        overlay.updateGameGeometry(null)
                         overlay.showStandby()
                     }
-                    SessionState.RESULT_READY -> {
-                        val result = latestSnapshot ?: return@post
-                        overlay.showResult(result, tables.shapeTable, result.evidenceArrivalUptime)
+                    else -> {
+                        snapshot?.let {
+                            overlay.render(it, tables.shapeTable, SystemClock.elapsedRealtimeNanos() / 1_000_000_000.0)
+                        }
+                        overlay.show()
                     }
-                    else -> overlay.show()
                 }
                 isOverlayVisible = true
+                updateNotification()
                 publishState(
                     if (currentState == SessionState.RUNNING) getString(R.string.status_overlay_shown) else null,
                 )
@@ -425,6 +457,7 @@ class CaptureService : Service() {
         if (currentState == SessionState.STOPPED || currentState == SessionState.STOPPING) return
         currentState = SessionState.STOPPING
         sessionGeneration++
+        overlayVisibility.hide(null)
         PowerMeter.shared.end()
         publishState()
         releaseCapture()
@@ -479,25 +512,33 @@ class CaptureService : Service() {
             this, 1, Intent(this, CaptureService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        return Notification.Builder(this, CHANNEL_ID)
+        val show = PendingIntent.getService(
+            this, 2, Intent(this, CaptureService::class.java).setAction(ACTION_SHOW_OVERLAY),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_glyph_lens)
             .setContentTitle(getString(
                 when (currentState) {
                     SessionState.STANDBY -> R.string.notification_standby_title
-                    SessionState.RESULT_READY -> R.string.notification_result_ready_title
                     else -> R.string.notification_title
                 },
             ))
             .setContentText(getString(
                 when (currentState) {
                     SessionState.STANDBY -> R.string.notification_standby_text
-                    SessionState.RESULT_READY -> R.string.notification_result_ready_text
-                    else -> R.string.notification_text
+                    else -> if ((recognitionMode == RecognitionMode.REALTIME || hidesAfterDrawing) &&
+                        preferences.showsFloatingWindow && !overlayVisibility.wantsWindow
+                    ) R.string.notification_realtime_hidden_text else R.string.notification_text
                 },
             ))
             .setContentIntent(openApp)
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
+        if (preferences.showsFloatingWindow) {
+            notification.addAction(Notification.Action.Builder(null, getString(R.string.notification_show_overlay), show).build())
+        }
+        return notification
             .addAction(Notification.Action.Builder(null, getString(R.string.notification_stop), stop).build())
             .build()
     }

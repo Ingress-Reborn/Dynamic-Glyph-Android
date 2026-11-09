@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="standby_icon_start">Glyph 認識を開始</string>
-    <string name="overlay_result_ready">今回の認識を停止しました</string>
-    <string name="overlay_start_recognition">認識を開始</string>
 </resources>

@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Rect
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.Process
@@ -11,6 +12,8 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.InputDevice
+import android.view.MotionEvent
 import android.view.WindowManager
 import android.widget.Button
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -26,9 +29,9 @@ import org.szres.glyphlens.R
 import org.szres.glyphlens.diagnostics.PowerMeter
 import org.szres.glyphlens.diagnostics.PowerMetric
 import org.szres.glyphlens.diagnostics.PowerReport
-import org.szres.glyphlens.diagnostics.PowerSnapshot
 import org.szres.glyphlens.recognition.CaptureLiveness
 import org.szres.glyphlens.recognition.GlyphDisplaySnapshot
+import org.szres.glyphlens.recognition.PhaseSource
 import org.szres.glyphlens.recognition.PredictionState
 import org.szres.glyphlens.recognition.SlotObservation
 import org.szres.glyphlens.recognition.TrackingState
@@ -67,19 +70,19 @@ class LiveCaptureRecognitionInstrumentedTest {
     }
 
     @Test
-    fun realtimeAutomaticallyStopsAfterFiveGlyphsAndRestartsFromRetainedResult() {
+    fun realtimeAutomaticallyHidesAfterDrawingAndContinuesNextRound() {
         verifyLiveCapture(
             "real-recording.mp4", listOf("question", "less", "forget", "all", "lie"),
-            stopsAfterRound = true,
+            hidesAfterDrawing = true,
         )
     }
 
     @Test
-    fun powerSavingAutomaticallyStopsAfterFiveGlyphsAndRestartsFromRetainedResult() {
+    fun powerSavingAutomaticallyHidesAfterDrawingAndContinuesNextRound() {
         verifyLiveCapture(
             "real-recording.mp4", listOf("question", "less", "forget", "all", "lie"),
             mode = RecognitionMode.POWER_SAVING,
-            stopsAfterRound = true,
+            hidesAfterDrawing = true,
         )
     }
 
@@ -91,20 +94,30 @@ class LiveCaptureRecognitionInstrumentedTest {
         )
     }
 
+    @Test
+    fun realtimeHiddenRecognitionShowsPredictionsAndRestoresFromNotification() {
+        verifyLiveCapture(
+            "real-recording.mp4", listOf("question", "less", "forget", "all", "lie"),
+            checksHiddenPrediction = true,
+        )
+    }
+
     private fun verifyLiveCapture(
         fileName: String,
         expected: List<String>,
         mode: RecognitionMode = RecognitionMode.REALTIME,
         checksPauseResume: Boolean = false,
-        stopsAfterRound: Boolean = false,
+        hidesAfterDrawing: Boolean = false,
         continuousRounds: Boolean = false,
+        checksHiddenPrediction: Boolean = false,
     ) {
         val source = File(context.getExternalFilesDir(null), fileName)
         val outputDirectory = File(context.getExternalFilesDir(null), "live-capture-tests").apply { mkdirs() }
         val reportName = source.nameWithoutExtension +
             (if (mode == RecognitionMode.POWER_SAVING) "-power-saving" else "") +
-            (if (stopsAfterRound) "-auto-stop" else "") +
-            (if (continuousRounds) "-continuous" else "")
+            (if (hidesAfterDrawing) "-auto-hide" else "") +
+            (if (continuousRounds) "-continuous" else "") +
+            (if (checksHiddenPrediction) "-hidden-realtime" else "")
         val output = File(outputDirectory, "$reportName.json")
         assertTrue("Cannot remove the previous live-test result: $output", !output.exists() || output.delete())
         val failureImage = File(outputDirectory, "$reportName-failure.png")
@@ -117,7 +130,7 @@ class LiveCaptureRecognitionInstrumentedTest {
         val preferences = context.getSharedPreferences(AppPreferences.PREFERENCES_NAME, Context.MODE_PRIVATE)
         val overrides: Map<String, Any?> = mapOf(
             AppPreferences.RECOGNITION_MODE_KEY to mode.rawValue,
-            AppPreferences.AUTO_STOP_KEY to stopsAfterRound,
+            AppPreferences.AUTO_HIDE_KEY to hidesAfterDrawing,
             "display.floatingWindow" to true,
             "game.language" to null,
             "game.detectedLanguage" to null,
@@ -163,7 +176,22 @@ class LiveCaptureRecognitionInstrumentedTest {
                     CaptureService.SessionState.RUNNING
                 }
             }
-            await("The floating overlay must be visible", 5_000) { CaptureService.isOverlayVisible }
+            if (mode == RecognitionMode.REALTIME) {
+                await("Realtime recognition must start with no floating surface", 5_000) {
+                    !CaptureService.isOverlayVisible && overlayControl("glyphDiagram") == null &&
+                        overlayControl("startRecognitionIcon") == null
+                }
+            } else {
+                await("Power saving must expose its start icon", 5_000) { overlayControl("startRecognitionIcon") != null }
+            }
+
+            if (checksHiddenPrediction) {
+                showFromNotification("$reportName-initial")
+                val initial = requireNotNull(CaptureService.latestSnapshot)
+                lifecycle.put("draggedIntoArray", dragPanelIntoArray())
+                clickOverlayControl("closeOverlay")
+                lifecycle.put("hiddenBeforePlayback", observeHiddenSession(initial, durationMillis = 1_000))
+            }
 
             playFixture(playbackSource)
             playerStarted = true
@@ -176,8 +204,20 @@ class LiveCaptureRecognitionInstrumentedTest {
                     CaptureService.currentState == CaptureService.SessionState.RUNNING
                 }
             }
-            val accepted = observePredictionAndFrozenInput(fileName, expected, trace, stopsAfterRound)
-            report = liveReport(source, expected, trace, mode, stopsAfterRound, accepted = accepted).apply {
+            if (hidesAfterDrawing) {
+                await("Automatic recognition must wait without a panel or icon", 5_000) {
+                    !CaptureService.isOverlayVisible && overlayControl("glyphDiagram") == null &&
+                        overlayControl("startRecognitionIcon") == null
+                }
+            }
+            val firstPopup = if (checksHiddenPrediction || hidesAfterDrawing) JSONObject() else null
+            firstPopup?.let {
+                it.put("screenshotPrefix", reportName)
+                lifecycle.put("firstAutomaticPopup", it)
+            }
+            val accepted = observePredictionAndFrozenInput(fileName, expected, trace, hidesAfterDrawing,
+                automaticPopup = firstPopup)
+            report = liveReport(source, expected, trace, mode, hidesAfterDrawing, accepted = accepted).apply {
                 put("recognitionLifecycle", lifecycle)
             }
             if (continuousRounds) {
@@ -186,7 +226,7 @@ class LiveCaptureRecognitionInstrumentedTest {
                 playFixture(playbackSource)
                 try {
                     nextAcceptance = observePredictionAndFrozenInput(
-                        fileName, expected, nextTrace, stopsAfterRound = false,
+                        fileName, expected, nextTrace, hidesAfterDrawing = false,
                         previousRound = accepted.input,
                     )
                     assertEquals("Continuous rounds must use the same capture session",
@@ -203,18 +243,90 @@ class LiveCaptureRecognitionInstrumentedTest {
                     })
                 }
             }
-            if (checksPauseResume || stopsAfterRound) {
-                if (!stopsAfterRound) {
-                    clickOverlayControl("closeOverlay")
-                    await("X did not stop recognition", 5_000) {
-                        CaptureService.currentState == CaptureService.SessionState.STANDBY
-                    }
-                    // OCR already submitted to the platform may finish after its capture engine closes.
-                    SystemClock.sleep(1_000)
-                    lifecycle.put("afterClose", observeStandby())
+            if (checksHiddenPrediction || checksPauseResume && mode == RecognitionMode.REALTIME) {
+                clickOverlayControl("closeOverlay")
+                lifecycle.put("afterClose", observeHiddenSession(accepted.input))
+                showFromNotification("$reportName-after-close")
+                val restored = requireNotNull(CaptureService.latestSnapshot)
+                assertEquals("Notification must retain the active recognition session",
+                    accepted.input.captureSessionID, restored.captureSessionID)
+                assertEquals("Showing the window must preserve the confirmed sequence", accepted.input.slots, restored.slots)
+                lifecycle.put("notificationShowClicked", true)
+                lifecycle.put("sameCaptureSessionAfterShow", restored.captureSessionID.toString())
+            }
+            if (checksHiddenPrediction) {
+                clickOverlayControl("closeOverlay")
+                await("The second close must leave no floating surface", 5_000) { !CaptureService.isOverlayVisible }
+                val nextTrace = LiveTrace()
+                val nextPopup = JSONObject().also {
+                    it.put("screenshotPrefix", reportName)
+                    lifecycle.put("nextAutomaticPopup", it)
                 }
-                if (!stopsAfterRound) playFixture(playbackSource)
-                clickOverlayControl(if (stopsAfterRound) "restartRecognitionButton" else "startRecognitionIcon")
+                var nextAcceptance: AcceptedSession? = null
+                playFixture(playbackSource)
+                try {
+                    nextAcceptance = observePredictionAndFrozenInput(
+                        fileName, expected, nextTrace, hidesAfterDrawing = false,
+                        previousRound = accepted.input, automaticPopup = nextPopup,
+                    )
+                    assertEquals("Hidden rounds must keep the same capture session",
+                        accepted.input.captureSessionID, nextAcceptance.input.captureSessionID)
+                    assertTrue("The next automatic popup must belong to a later round",
+                        nextAcceptance.input.hackID > accepted.input.hackID)
+                    lifecycle.put("continuedHiddenWithoutRestart", true)
+                } finally {
+                    lifecycle.put("hiddenNextRound", liveReport(source, expected, nextTrace, mode, false, accepted = nextAcceptance).apply {
+                        put("status", if (nextAcceptance == null) "failed" else "passed")
+                    })
+                }
+            }
+            if (hidesAfterDrawing) {
+                lifecycle.put("drawingCompleted", observeDrawingCompletion(accepted.input, trace, reportName))
+                showFromNotification("$reportName-after-completion")
+                val restored = requireNotNull(CaptureService.latestSnapshot)
+                assertEquals("Notification must keep the same continuous recognition session",
+                    accepted.input.captureSessionID, restored.captureSessionID)
+                assertEquals("Notification must restore the same completed sequence", accepted.input.slots, restored.slots)
+                assertControlsHidden()
+                val restoredAt = SystemClock.elapsedRealtime()
+                while (SystemClock.elapsedRealtime() - restoredAt < 1_000) {
+                    assertTrue("Manual Show after completion must not be hidden again every frame", CaptureService.isOverlayVisible)
+                    assertControlsHidden()
+                    SystemClock.sleep(50)
+                }
+                lifecycle.put("completedResultRestoredFromNotification", true)
+                val nextTrace = LiveTrace()
+                val nextPopup = JSONObject().also {
+                    it.put("screenshotPrefix", reportName)
+                    lifecycle.put("nextAutomaticPopup", it)
+                }
+                var nextAcceptance: AcceptedSession? = null
+                playFixture(playbackSource)
+                try {
+                    nextAcceptance = observePredictionAndFrozenInput(
+                        fileName, expected, nextTrace, hidesAfterDrawing = true,
+                        previousRound = accepted.input, automaticPopup = nextPopup,
+                    )
+                    assertEquals("Automatic rounds must share the same capture session",
+                        accepted.input.captureSessionID, nextAcceptance.input.captureSessionID)
+                    lifecycle.put("nextDrawingCompleted", observeDrawingCompletion(nextAcceptance.input, nextTrace, "$reportName-next"))
+                    lifecycle.put("continuedAutomaticallyWithoutRestart", true)
+                } finally {
+                    lifecycle.put("automaticNextRound", liveReport(source, expected, nextTrace, mode, true, accepted = nextAcceptance).apply {
+                        put("status", if (nextAcceptance == null) "failed" else "passed")
+                    })
+                }
+            }
+            if (checksPauseResume && mode == RecognitionMode.POWER_SAVING) {
+                clickOverlayControl("closeOverlay")
+                await("X did not stop recognition", 5_000) {
+                    CaptureService.currentState == CaptureService.SessionState.STANDBY
+                }
+                // OCR already submitted to the platform may finish after its capture engine closes.
+                SystemClock.sleep(1_000)
+                lifecycle.put("afterClose", observeStandby())
+                playFixture(playbackSource)
+                clickOverlayControl("startRecognitionIcon")
                 await("The icon did not resume the existing screen-sharing session", 15_000) {
                     CaptureService.currentState == CaptureService.SessionState.RUNNING && CaptureService.latestSnapshot != null
                 }
@@ -222,34 +334,18 @@ class LiveCaptureRecognitionInstrumentedTest {
                 assertTrue("Resume must create a fresh recognition session", resumed.captureSessionID != accepted.input.captureSessionID)
                 assertTrue("Resume must not retain the previous confirmed prefix", resumed.outlook.observed.isEmpty())
                 assertTrue("Resume must not retain confirmed Glyphs", resumed.slots.none { it.status == SlotObservation.Status.CONFIRMED })
-                if (!stopsAfterRound) assertTrue("Resume must clear the previous frozen input", !resumed.isFrozen)
+                assertTrue("Resume must clear the previous frozen input", !resumed.isFrozen)
                 lifecycle.put("resumedWithoutAnotherConsent", true)
                 lifecycle.put("previousCaptureSessionID", accepted.input.captureSessionID.toString())
                 lifecycle.put("resumedCaptureSessionID", resumed.captureSessionID.toString())
-                if (stopsAfterRound) {
-                    lifecycle.put("waitingForNextRound", observeRestartBeforeNextRound(resumed))
-                    playFixture(playbackSource)
-                }
-                if (mode == RecognitionMode.POWER_SAVING || stopsAfterRound) {
-                    val resumedTrace = LiveTrace()
-                    var resumedAcceptance: AcceptedSession? = null
-                    try {
-                        resumedAcceptance = observePredictionAndFrozenInput(
-                            fileName, expected, resumedTrace, stopsAfterRound,
-                            ignoreStartupInput = stopsAfterRound,
-                        )
-                    } finally {
-                        lifecycle.put("resumedRecognition", liveReport(source, expected, resumedTrace, mode, stopsAfterRound, accepted = resumedAcceptance).apply {
-                            put("status", if (resumedAcceptance == null) "failed" else "passed")
-                        })
-                    }
-                }
-                if (stopsAfterRound) {
-                    clickOverlayControl("closeOverlay")
-                    await("X did not dismiss the retained result", 5_000) {
-                        CaptureService.currentState == CaptureService.SessionState.STANDBY
-                    }
-                    lifecycle.put("afterResultClose", observeStandby())
+                val resumedTrace = LiveTrace()
+                var resumedAcceptance: AcceptedSession? = null
+                try {
+                    resumedAcceptance = observePredictionAndFrozenInput(fileName, expected, resumedTrace, hidesAfterDrawing = false)
+                } finally {
+                    lifecycle.put("resumedRecognition", liveReport(source, expected, resumedTrace, mode, false, accepted = resumedAcceptance).apply {
+                        put("status", if (resumedAcceptance == null) "failed" else "passed")
+                    })
                 }
             }
             assertEquals("Playback must leave the source movie intact", sourceLength, source.length())
@@ -263,11 +359,17 @@ class LiveCaptureRecognitionInstrumentedTest {
             output.writeText(report.toString(2))
         } catch (failure: Throwable) {
             try {
-                val failureReport = report ?: liveReport(source, expected, trace, mode, stopsAfterRound)
+                val failureSnapshot = CaptureService.latestSnapshot
+                failureSnapshot?.let(trace::observe)
+                val failureReport = report ?: liveReport(source, expected, trace, mode, hidesAfterDrawing)
+                failureReport.put("finalLiveReport", liveReport(source, expected, trace, mode, hidesAfterDrawing).apply {
+                    put("status", "failed")
+                })
                 failureReport.put("recognitionLifecycle", lifecycle)
                 failureReport.put("status", "failed")
                 failureReport.put("failureClass", failure.javaClass.name)
                 failureReport.put("failureMessage", failure.message)
+                failureSnapshot?.let { failureReport.put("failureSnapshot", snapshotJson(it)) }
                 output.writeText(failureReport.toString(2))
                 val screenshot = instrumentation.uiAutomation.takeScreenshot()
                 if (screenshot != null) {
@@ -362,29 +464,266 @@ class LiveCaptureRecognitionInstrumentedTest {
         }
     }
 
-    private fun observeRestartBeforeNextRound(resumed: GlyphDisplaySnapshot): JSONObject {
-        val started = SystemClock.elapsedRealtime()
+    private fun observeHiddenSession(
+        snapshot: GlyphDisplaySnapshot,
+        durationMillis: Long = 3_000,
+    ): JSONObject {
+        await("X must completely hide the floating window", 5_000) {
+            !CaptureService.isOverlayVisible && overlayControl("glyphDiagram") == null &&
+                overlayControl("startRecognitionIcon") == null
+        }
         val frames = CaptureService.frameCount
-        while (SystemClock.elapsedRealtime() - started < 2_000) {
-            assertEquals("Restart must wait for the next round while the previous input screen remains visible",
-                CaptureService.SessionState.RUNNING, CaptureService.currentState)
-            assertTrue("Restart must keep recognition active", CaptureService.isRecognizing)
-            val snapshot = requireNotNull(CaptureService.latestSnapshot)
-            assertEquals("Waiting must retain the new recognition session", resumed.captureSessionID, snapshot.captureSessionID)
-            assertTrue("The old input screen must not restore the previous confirmed prefix", snapshot.outlook.observed.isEmpty())
-            assertTrue("The old input screen must not restore confirmed Glyphs", snapshot.slots.none { it.status == SlotObservation.Status.CONFIRMED })
+        val before = PowerMeter.shared.snapshot()
+        val started = SystemClock.elapsedRealtime()
+        while (SystemClock.elapsedRealtime() - started < durationMillis) {
+            assertEquals("Hiding must preserve the active capture state", CaptureService.SessionState.RUNNING, CaptureService.currentState)
+            assertTrue("Hiding must keep recognition active", CaptureService.isRecognizing)
+            val current = requireNotNull(CaptureService.latestSnapshot)
+            assertEquals("Hiding must keep the same capture session", snapshot.captureSessionID, current.captureSessionID)
+            assertEquals("The hidden observation must remain in the same round", snapshot.hackID, current.hackID)
+            assertTrue("The same round must not reopen the dismissed result", !CaptureService.isOverlayVisible)
+            assertEquals("Realtime mode must not leave a floating icon", null, overlayControl("startRecognitionIcon"))
+            assertEquals("The dismissed panel must stay absent", null, overlayControl("glyphDiagram"))
             SystemClock.sleep(100)
         }
-        assertTrue("Restart must keep receiving frames before the next round", CaptureService.frameCount > frames)
-        assertEquals("The previous input screen must not automatically stop a fresh session",
-            CaptureService.SessionState.RUNNING, CaptureService.currentState)
+        val after = PowerMeter.shared.snapshot()
+        assertTrue("Hidden recognition must keep acquiring frames", CaptureService.frameCount > frames)
+        assertTrue("Hidden recognition must keep analysing frames",
+            after.total(PowerMetric.FRAMES_ANALYSED).count > before.total(PowerMetric.FRAMES_ANALYSED).count)
+        assertEquals("Hidden windows must not keep rendering", before.total(PowerMetric.DISPLAY_UPDATE).count,
+            after.total(PowerMetric.DISPLAY_UPDATE).count)
         return JSONObject().apply {
             put("observedMillis", SystemClock.elapsedRealtime() - started)
+            put("captureSessionID", snapshot.captureSessionID.toString())
+            put("captureState", CaptureService.currentState.name)
             put("frameCountBefore", frames)
             put("frameCountAfter", CaptureService.frameCount)
-            put("oldSequenceCleared", true)
-            put("recognitionStillRunning", true)
+            put("analysedCountBefore", before.total(PowerMetric.FRAMES_ANALYSED).count)
+            put("analysedCountAfter", after.total(PowerMetric.FRAMES_ANALYSED).count)
+            put("displayUpdateCountBefore", before.total(PowerMetric.DISPLAY_UPDATE).count)
+            put("displayUpdateCountAfter", after.total(PowerMetric.DISPLAY_UPDATE).count)
+            put("floatingPanelAbsent", true)
+            put("floatingIconAbsent", true)
         }
+    }
+
+    private fun assertControlsHidden() {
+        assertEquals("Automatic hiding removes the whole control row", null, overlayControl("overlayControls"))
+        assertEquals("Automatic hiding must not expose the title/drag row", null, overlayControl("dragHandle"))
+        assertEquals("Automatic hiding must not expose X", null, overlayControl("closeOverlay"))
+        assertEquals("Automatic hiding must not leave a start icon", null, overlayControl("startRecognitionIcon"))
+        assertTrue("The Glyph canvas must stay available while drawing", overlayControl("glyphDiagram")?.isVisibleToUser == true)
+    }
+
+    private fun observeDrawingCompletion(
+        input: GlyphDisplaySnapshot,
+        trace: LiveTrace,
+        reportName: String,
+    ): JSONObject {
+        val started = SystemClock.elapsedRealtime()
+        val deadline = started + 14_000
+        var completion: GlyphDisplaySnapshot? = null
+        while (SystemClock.elapsedRealtime() < deadline) {
+            // Accessibility retrieval can span the frame that completes drawing and removes the window.
+            val canvasVisible = CaptureService.isOverlayVisible &&
+                overlayControl("glyphDiagram")?.isVisibleToUser == true
+            val snapshot = requireNotNull(CaptureService.latestSnapshot)
+            trace.observe(snapshot)
+            assertEquals("Automatic hiding must not restart capture", input.captureSessionID, snapshot.captureSessionID)
+            assertEquals("Completion must come from the first playback of this round", input.hackID, snapshot.hackID)
+            assertEquals("Recognition must keep running through drawing completion", CaptureService.SessionState.RUNNING, CaptureService.currentState)
+            assertTrue("Recognition must stay active after drawing", CaptureService.isRecognizing)
+            if (snapshot.state == TrackingState.COMPLETED) {
+                assertEquals(CaptureLiveness.LIVE, snapshot.liveness)
+                assertEquals(PhaseSource.HEADER_TEXT, snapshot.phaseSource)
+                assertEquals("Drawing must not rewrite the recognized sequence", input.slots, snapshot.slots)
+                completion = snapshot
+                break
+            }
+            assertTrue("The result must not hide before genuine completion evidence", canvasVisible)
+            SystemClock.sleep(20)
+        }
+        val completed = completion ?: throw AssertionError("The recording did not provide a genuine COMPLETED phase before its next loop")
+        await("Completed drawing must automatically hide every floating surface", 3_000) {
+            !CaptureService.isOverlayVisible && overlayControl("glyphDiagram") == null &&
+                overlayControl("startRecognitionIcon") == null
+        }
+        val screenshotName = "$reportName-completed-hidden.png"
+        saveLiveScreenshot(screenshotName)
+        val hidden = observeHiddenSession(completed, durationMillis = 1_000)
+        return JSONObject().apply {
+            put("elapsedAfterInputCheckMillis", SystemClock.elapsedRealtime() - started)
+            put("completion", snapshotJson(completed))
+            put("hiddenAfterCompletion", hidden)
+            put("screenshot", screenshotName)
+            put("sameCaptureSession", true)
+            put("recognitionContinues", true)
+        }
+    }
+
+    private fun dragPanelIntoArray(): JSONObject {
+        val screen = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val screenWidth = screen.width
+        val screenHeight = screen.height
+        screen.recycle()
+        val handle = Rect().also { requireNotNull(overlayControl("dragHandle")).getBoundsInScreen(it) }
+        val startX = handle.exactCenterX()
+        val startY = handle.exactCenterY()
+        val targetY = screenHeight * 0.60f
+        val downAt = SystemClock.uptimeMillis()
+        for (step in 0..10) {
+            val action = when (step) {
+                0 -> MotionEvent.ACTION_DOWN
+                10 -> MotionEvent.ACTION_UP
+                else -> MotionEvent.ACTION_MOVE
+            }
+            val event = MotionEvent.obtain(downAt, SystemClock.uptimeMillis(), action,
+                startX, startY + (targetY - startY) * step / 10f, 0).apply {
+                source = InputDevice.SOURCE_TOUCHSCREEN
+            }
+            try {
+                assertTrue("The actual panel drag must be delivered", instrumentation.uiAutomation.injectInputEvent(event, true))
+            } finally {
+                event.recycle()
+            }
+            SystemClock.sleep(25)
+        }
+        val panel = Rect()
+        await("The fixture must move the panel into the array region", 5_000) {
+            overlayControl("glyphDiagram")?.window?.getBoundsInScreen(panel)
+            panel.top > screenHeight * 0.45
+        }
+        val screenshotName = "real-recording-hidden-realtime-dragged.png"
+        saveLiveScreenshot(screenshotName)
+        return JSONObject().apply {
+            put("screenWidth", screenWidth)
+            put("screenHeight", screenHeight)
+            put("windowBounds", panel.toShortString())
+            put("actualTouchDrag", true)
+            put("screenshot", screenshotName)
+        }
+    }
+
+    private fun recordPopupPlacement(snapshot: GlyphDisplaySnapshot, evidence: JSONObject) {
+        val panel = Rect()
+        await("The automatic popup must expose its window bounds", 5_000) {
+            overlayControl("glyphDiagram")?.window?.getBoundsInScreen(panel)
+            !panel.isEmpty
+        }
+        val screen = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val screenshotName = "${evidence.getString("screenshotPrefix")}-popup-${snapshot.hackID}.png"
+        try {
+            // The fixed 1216×2688 recording's upper ring starts below y=940; this is an independent fixture boundary.
+            val scale = minOf(screen.width / 1216.0, screen.height / 2688.0)
+            val arrayClearanceTop = (screen.height - 2688 * scale) / 2 + 940 * scale
+            assertTrue("Automatic popup must move out of the array instead of keeping the dragged position: $panel",
+                panel.bottom <= arrayClearanceTop)
+            File(context.getExternalFilesDir(null), "live-capture-tests/$screenshotName")
+                .outputStream().use { assertTrue(screen.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+            evidence.put("windowBounds", panel.toShortString())
+            evidence.put("arrayClearanceTopPixels", arrayClearanceTop)
+            evidence.put("screenshot", screenshotName)
+        } finally {
+            screen.recycle()
+        }
+    }
+
+    private fun saveLiveScreenshot(name: String) {
+        val screenshot = requireNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            File(context.getExternalFilesDir(null), "live-capture-tests/$name")
+                .outputStream().use { assertTrue(screenshot.compress(Bitmap.CompressFormat.PNG, 100, it)) }
+        } finally {
+            screenshot.recycle()
+        }
+    }
+
+    private fun showFromNotification(reportName: String) {
+        val label = context.getString(R.string.notification_show_overlay)
+        val title = context.getString(R.string.notification_title)
+        runShell("cmd statusbar expand-notifications")
+        var expanded = false
+        try {
+            var action: AccessibilityNodeInfo? = null
+            await("Notification does not expose its Show floating window action", 5_000) {
+                action = findInWindows {
+                    it.packageName?.toString() == "com.android.systemui" && it.isVisibleToUser &&
+                        it.text?.toString()?.equals(label, ignoreCase = true) == true
+                }
+                if (action == null && !expanded) {
+                    var card = findInWindows {
+                        it.packageName?.toString() == "com.android.systemui" && it.text?.toString() == title
+                    }?.parent
+                    while (card != null) {
+                        val expand = findNode(card) { it.viewIdResourceName == "android:id/expand_button" && it.isClickable }
+                        if (expand != null) {
+                            click(expand)
+                            expanded = true
+                            break
+                        }
+                        card = card.parent
+                    }
+                }
+                action != null
+            }
+            click(requireNotNull(action))
+        } catch (failure: Throwable) {
+            try {
+                saveLiveScreenshot("$reportName-notification-failure.png")
+                val windows = JSONArray()
+                for (window in instrumentation.uiAutomation.windows) {
+                    val bounds = Rect().also(window::getBoundsInScreen)
+                    windows.put(JSONObject().apply {
+                        put("id", window.id)
+                        put("type", window.type)
+                        put("title", window.title?.toString())
+                        put("active", window.isActive)
+                        put("focused", window.isFocused)
+                        put("bounds", bounds.toShortString())
+                        window.root?.let { put("root", accessibilityTree(it)) }
+                    })
+                }
+                File(context.getExternalFilesDir(null), "live-capture-tests/$reportName-notification-windows.json")
+                    .writeText(JSONObject().apply {
+                        put("expectedAction", label)
+                        put("expectedTitle", title)
+                        put("expanded", expanded)
+                        put("windows", windows)
+                    }.toString(2))
+            } catch (diagnosticFailure: Throwable) {
+                failure.addSuppressed(diagnosticFailure)
+            }
+            throw failure
+        } finally {
+            runShell("cmd statusbar collapse")
+        }
+        await("The actual notification action did not show the panel", 5_000) {
+            CaptureService.isOverlayVisible && overlayControl("glyphDiagram") != null && overlayControl("startRecognitionIcon") == null
+        }
+    }
+
+    private fun accessibilityTree(node: AccessibilityNodeInfo): JSONObject {
+        val bounds = Rect().also(node::getBoundsInScreen)
+        return JSONObject().apply {
+            put("package", node.packageName?.toString())
+            put("class", node.className?.toString())
+            put("id", node.viewIdResourceName)
+            put("text", node.text?.toString())
+            put("description", node.contentDescription?.toString())
+            put("visible", node.isVisibleToUser)
+            put("clickable", node.isClickable)
+            put("enabled", node.isEnabled)
+            put("bounds", bounds.toShortString())
+            put("actions", JSONArray(node.actionList.map { it.id }))
+            put("children", JSONArray().apply {
+                for (index in 0 until node.childCount) node.getChild(index)?.let { put(accessibilityTree(it)) }
+            })
+        }
+    }
+
+    private fun runShell(command: String) {
+        ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(command))
+            .bufferedReader().use { it.readText() }
     }
 
     private fun clickOverlayControl(id: String) {
@@ -392,11 +731,13 @@ class LiveCaptureRecognitionInstrumentedTest {
         click(requireNotNull(overlayControl(id)))
     }
 
-    private fun overlayControl(id: String): AccessibilityNodeInfo? = instrumentation.uiAutomation.windows
+    private fun overlayControl(id: String): AccessibilityNodeInfo? = findInWindows {
+        it.viewIdResourceName == "${context.packageName}:id/$id"
+    }
+
+    private fun findInWindows(matches: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? = instrumentation.uiAutomation.windows
         .firstNotNullOfOrNull { window ->
-            window.root?.let { root ->
-                findNode(root) { it.viewIdResourceName == "${context.packageName}:id/$id" }
-            }
+            window.root?.let { root -> findNode(root, matches) }
         }
 
     private fun fixtureForPlayer(source: File): File {
@@ -414,7 +755,6 @@ class LiveCaptureRecognitionInstrumentedTest {
         val prediction: GlyphDisplaySnapshot,
         val input: GlyphDisplaySnapshot,
         val elapsedMillis: Long,
-        val retainedResult: JSONObject?,
         val measurements: JSONObject,
     )
 
@@ -422,22 +762,49 @@ class LiveCaptureRecognitionInstrumentedTest {
         fileName: String,
         expected: List<String>,
         trace: LiveTrace,
-        stopsAfterRound: Boolean,
-        ignoreStartupInput: Boolean = false,
+        hidesAfterDrawing: Boolean,
         previousRound: GlyphDisplaySnapshot? = null,
+        automaticPopup: JSONObject? = null,
     ): AcceptedSession {
         val measurements = RoundMeasurements()
         val predictions = mutableMapOf<Int, GlyphDisplaySnapshot>()
         var frozen: GlyphDisplaySnapshot? = null
         var frozenAt = 0L
-        var frozenFrames = 0L
-        var stoppedPowerBaseline: PowerSnapshot? = null
         var last: GlyphDisplaySnapshot? = null
         var nextRoundStarted = false
+        var nextRoundHidden = previousRound == null || !CaptureService.isOverlayVisible
         val startedAt = SystemClock.elapsedRealtime()
         val deadline = startedAt + 40_000
         while (SystemClock.elapsedRealtime() < deadline) {
             val snapshot = CaptureService.latestSnapshot
+            if (previousRound != null && hidesAfterDrawing && !CaptureService.isOverlayVisible) nextRoundHidden = true
+            if (automaticPopup != null && !automaticPopup.has("hackID") && CaptureService.isOverlayVisible &&
+                (previousRound == null || snapshot != null && snapshot.hackID > previousRound.hackID) &&
+                (!hidesAfterDrawing || nextRoundHidden)
+            ) {
+                val shown = requireNotNull(snapshot)
+                assertTrue("An automatic popup must show the requested new round",
+                    previousRound == null || shown.hackID > previousRound.hackID)
+                assertEquals("The automatic popup must appear during prediction", TrackingState.PRESENTING, shown.state)
+                assertEquals("The automatic popup must have a unique prediction", PredictionState.RESOLVED, shown.outlook.state)
+                assertTrue("The automatic popup must use a confirmed prefix and a remaining prediction",
+                    shown.outlook.observed.isNotEmpty() && shown.outlook.predictedSuffix.isNotEmpty())
+                assertEquals("The automatic popup must complete this recording's entire sequence", expected,
+                    (shown.outlook.observed + shown.outlook.predictedSuffix).map { it.name })
+                assertEquals(expected.size, shown.expectedSlotCount)
+                assertEquals("Automatic results must not use a floating icon", null, overlayControl("startRecognitionIcon"))
+                automaticPopup.put("hackID", shown.hackID)
+                automaticPopup.put("captureSessionID", shown.captureSessionID.toString())
+                automaticPopup.put("elapsedMillis", SystemClock.elapsedRealtime() - startedAt)
+                automaticPopup.put("confirmedPrefix", JSONArray(shown.outlook.observed.map { it.name }))
+                automaticPopup.put("predictedSuffix", JSONArray(shown.outlook.predictedSuffix.map { it.name }))
+                recordPopupPlacement(shown, automaticPopup)
+                if (hidesAfterDrawing) {
+                    assertControlsHidden()
+                    automaticPopup.put("controlRowAbsent", true)
+                    automaticPopup.put("previousRoundHiddenBeforePopup", nextRoundHidden)
+                }
+            }
             if (previousRound != null && snapshot != null) {
                 assertEquals("Continuous recognition must keep the existing capture session",
                     previousRound.captureSessionID, snapshot.captureSessionID)
@@ -467,25 +834,16 @@ class LiveCaptureRecognitionInstrumentedTest {
                     }
                 }
                 if (frozen == null && snapshot.state == TrackingState.INPUT &&
-                    isNextRound &&
-                    !(ignoreStartupInput && snapshot.hackID == 0)
+                    isNextRound
                 ) {
                     if (previousRound != null) assertTrue("A new round must be observed presenting before its first input", nextRoundStarted)
+                    if (automaticPopup != null) assertTrue("Prediction must have automatically shown the hidden panel", automaticPopup.has("hackID"))
                     assertTrue("First input must have predicted from its confirmed first two slots", snapshot.hackID in predictions)
                     assertEquals("First input must contain the complete recorded sequence", expected, snapshot.slots.map { it.glyph?.name })
                     assertTrue("Every slot must be confirmed at first input", snapshot.slots.all { it.status == SlotObservation.Status.CONFIRMED })
                     assertTrue("First input must freeze the expected sequence", snapshot.isFrozen)
                     frozen = snapshot
                     frozenAt = SystemClock.elapsedRealtime()
-                    if (stopsAfterRound) {
-                        await("The completed round did not stop recognition and retain its result", 5_000) {
-                            CaptureService.currentState == CaptureService.SessionState.RESULT_READY
-                        }
-                        frozenFrames = CaptureService.frameCount
-                        await("The retained result must offer Start recognition", 5_000) {
-                            overlayControl("restartRecognitionButton") != null
-                        }
-                    }
                 }
             }
             if (frozen != null) {
@@ -496,49 +854,19 @@ class LiveCaptureRecognitionInstrumentedTest {
                 assertTrue("Expected sequence must stay frozen", current.isFrozen)
                 assertEquals(CaptureLiveness.LIVE, current.liveness)
                 val retainedMillis = SystemClock.elapsedRealtime() - frozenAt
-                if (stopsAfterRound) {
-                    assertEquals(CaptureService.SessionState.RESULT_READY, CaptureService.currentState)
-                    assertTrue("The completed round must stop recognition", !CaptureService.isRecognizing)
-                    assertEquals("Retaining the result must not acquire more frames", frozenFrames, CaptureService.frameCount)
-                    assertEquals("Retaining the result must not publish new evidence", frozen, current)
-                    if (stoppedPowerBaseline == null && retainedMillis >= 1_000) {
-                        stoppedPowerBaseline = PowerMeter.shared.snapshot()
-                    }
+                if (hidesAfterDrawing) {
+                    assertTrue("The result must stay visible during the player's drawing phase", CaptureService.isOverlayVisible)
+                    assertControlsHidden()
                 }
                 if (retainedMillis >= 3_000) {
-                    val retainedResult = if (stopsAfterRound) {
-                        val baseline = requireNotNull(stoppedPowerBaseline)
-                        val stoppedPower = PowerMeter.shared.snapshot()
-                        for (metric in listOf(PowerMetric.FRAMES_ANALYSED, PowerMetric.HEADER_READ)) {
-                            assertEquals("A retained result must not add $metric work", baseline.total(metric).count, stoppedPower.total(metric).count)
-                        }
-                        assertTrue("The result panel must stay visible", CaptureService.isOverlayVisible && overlayControl("dragHandle") != null)
-                        assertTrue("The result restart control must stay visible", overlayControl("restartRecognitionButton") != null)
-                        assertEquals("The result panel must replace the standby icon", null, overlayControl("startRecognitionIcon"))
-                        JSONObject().apply {
-                            put("retainedMillis", retainedMillis)
-                            put("frameCountBefore", frozenFrames)
-                            put("frameCountAfter", CaptureService.frameCount)
-                            put("sourceFrameTimeBefore", frozen.sourceFrameTime)
-                            put("sourceFrameTimeAfter", current.sourceFrameTime)
-                            put("analysedCountBefore", baseline.total(PowerMetric.FRAMES_ANALYSED).count)
-                            put("analysedCountAfter", stoppedPower.total(PowerMetric.FRAMES_ANALYSED).count)
-                            put("headerReadCountBefore", baseline.total(PowerMetric.HEADER_READ).count)
-                            put("headerReadCountAfter", stoppedPower.total(PowerMetric.HEADER_READ).count)
-                            put("resultPanelVisible", true)
-                            put("restartControlVisible", true)
-                        }
-                    } else null
-                    Log.i(TAG, "$fileName hack ${current.hackID}: full sequence retained for three seconds; automatic stop=$stopsAfterRound")
+                    Log.i(TAG, "$fileName hack ${current.hackID}: full sequence retained while drawing for three seconds")
                     return AcceptedSession(
                         predictions.getValue(current.hackID), frozen, SystemClock.elapsedRealtime() - startedAt,
-                        retainedResult, measurements.finish(),
+                        measurements.finish(),
                     )
                 }
             }
-            assertTrue("Live capture stopped unexpectedly: ${CaptureService.currentState}",
-                CaptureService.currentState == CaptureService.SessionState.RUNNING ||
-                    stopsAfterRound && CaptureService.currentState == CaptureService.SessionState.RESULT_READY)
+            assertEquals("Live capture stopped unexpectedly", CaptureService.SessionState.RUNNING, CaptureService.currentState)
             SystemClock.sleep(20)
         }
         throw AssertionError(
@@ -625,7 +953,7 @@ class LiveCaptureRecognitionInstrumentedTest {
         expected: List<String>,
         trace: LiveTrace,
         mode: RecognitionMode,
-        stopsAfterRound: Boolean,
+        hidesAfterDrawing: Boolean,
         accepted: AcceptedSession? = null,
     ): JSONObject {
         val snapshot = CaptureService.latestSnapshot
@@ -654,7 +982,7 @@ class LiveCaptureRecognitionInstrumentedTest {
             put("overlayVisible", CaptureService.isOverlayVisible)
             put("elapsedMilliseconds", accepted?.elapsedMillis ?: SystemClock.elapsedRealtime() - trace.startedAtUptimeMillis)
             put("recognitionMode", mode.rawValue)
-            put("stopsAfterRound", stopsAfterRound)
+            put("hidesAfterDrawing", hidesAfterDrawing)
             put("captureState", CaptureService.currentState.name)
             put("powerSaving", mode == RecognitionMode.POWER_SAVING)
             put("frameCount", CaptureService.frameCount)
@@ -668,7 +996,6 @@ class LiveCaptureRecognitionInstrumentedTest {
                 put("predictedSuffix", JSONArray(it.prediction.outlook.predictedSuffix.map { glyph -> glyph.name }))
                 put("inputFreeze", it.input.isFrozen)
                 put("roundMeasurements", it.measurements)
-                it.retainedResult?.let { retained -> put("retainedResult", retained) }
             }
             put("droppedStateSpans", trace.droppedSpans)
             put("stateSpans", JSONArray(trace.spans.map { span ->
@@ -726,12 +1053,11 @@ class LiveCaptureRecognitionInstrumentedTest {
         while (SystemClock.elapsedRealtime() < deadline) {
             val root = instrumentation.uiAutomation.rootInActiveWindow
             if (root != null) {
-                // Declining optional notifications still continues MainActivity's capture flow.
-                val notificationDenial = findNode(root) {
-                    it.viewIdResourceName?.endsWith(":id/permission_deny_button") == true
+                val notificationPermission = findNode(root) {
+                    it.viewIdResourceName?.endsWith(":id/permission_allow_button") == true
                 }
-                if (notificationDenial != null) {
-                    click(notificationDenial)
+                if (notificationPermission != null) {
+                    click(notificationPermission)
                 } else {
                     val wholeScreen = findNode(root) { it.text?.toString() in WHOLE_SCREEN_LABELS }
                     val selector = findNode(root) {

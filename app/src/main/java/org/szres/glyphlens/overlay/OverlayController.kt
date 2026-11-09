@@ -23,6 +23,7 @@ import org.szres.glyphlens.recognition.GlyphDisplaySnapshot
 import org.szres.glyphlens.recognition.GlyphTable
 import org.szres.glyphlens.settings.AppPreferences
 import org.szres.glyphlens.settings.OverlayWindowGeometry
+import org.szres.glyphlens.settings.RecognitionMode
 
 @MainThread
 @SuppressLint("InflateParams")
@@ -41,9 +42,8 @@ class OverlayController(
     private val view: View = LayoutInflater.from(applicationContext).inflate(R.layout.overlay_glyph, null)
     private val glyphDiagram: GlyphDiagramView = view.findViewById(R.id.glyphDiagram)
     private val statusLabel: TextView = view.findViewById(R.id.dragHandle)
-    private val controls = statusLabel.parent as View
+    private val controls: View = view.findViewById(R.id.overlayControls)
     private val closeButton: Button = view.findViewById(R.id.closeOverlay)
-    private val restartButton: Button = view.findViewById(R.id.restartRecognitionButton)
     private val standbyIcon = LayoutInflater.from(applicationContext)
         .inflate(R.layout.overlay_standby, null) as ImageButton
     private val layoutParams = WindowManager.LayoutParams(
@@ -73,7 +73,6 @@ class OverlayController(
     private var standbyAttached = false
     private var preferencesRegistered = false
     private var latest: LatestRender? = null
-    private var resultReady = false
     private val placement = OverlayPlacement()
     private var gameGeometry: OverlayGameGeometry? = null
 
@@ -82,6 +81,7 @@ class OverlayController(
             key == AppPreferences.CANVAS_HEIGHT_KEY ||
             key == AppPreferences.CANVAS_RESOLUTION_KEY ||
             key == AppPreferences.MODE_COLORS_KEY ||
+            key == AppPreferences.AUTO_HIDE_KEY ||
             key == "pip.preventsCapture"
         ) {
             if (latest != null) renderCurrent() else applyPreferences()
@@ -89,11 +89,15 @@ class OverlayController(
     }
 
     init {
+        closeButton.contentDescription = applicationContext.getString(
+            if (preferences.recognitionMode == RecognitionMode.REALTIME) R.string.overlay_hide
+            else R.string.stop_recognition,
+        )
         closeButton.setOnClickListener { onClose() }
-        restartButton.setOnClickListener { onStartRecognition() }
         standbyIcon.setOnClickListener { onStartRecognition() }
         view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyAutomaticPlacement() }
-        installDragHandler()
+        installDragHandler(statusLabel)
+        installDragHandler(glyphDiagram)
         installStandbyDragHandler()
         applyPreferences()
     }
@@ -110,27 +114,22 @@ class OverlayController(
         applyAutomaticPlacement()
     }
 
-    /** Production entry point for CaptureService; call on the main thread with one shared uptime. */
-    fun render(snapshot: GlyphDisplaySnapshot, table: GlyphTable?, uptime: Double) {
-        resultReady = false
-        latest = LatestRender(snapshot, table, uptime)
-        renderCurrent()
+    fun resetAutomaticPlacement() {
+        placement.resetAutomaticPlacement()
+        layoutParams.x = 16
+        layoutParams.y = (screenSize().height * 0.18).toInt()
     }
 
-    fun showResult(snapshot: GlyphDisplaySnapshot, table: GlyphTable?, uptime: Double) {
-        resultReady = true
-        // Settings redraw a stopped result at its original display time, without freshening evidence.
+    /** Production entry point for CaptureService; call on the main thread with one shared uptime. */
+    fun render(snapshot: GlyphDisplaySnapshot, table: GlyphTable?, uptime: Double) {
         latest = LatestRender(snapshot, table, uptime)
         renderCurrent()
-        showPanel()
     }
 
     private fun renderCurrent() {
         val current = latest ?: return
-        restartButton.visibility = if (resultReady) View.VISIBLE else View.GONE
         applyPreferences()
-        statusLabel.text = if (resultReady) applicationContext.getString(R.string.overlay_result_ready)
-            else current.snapshot.statusLine(current.uptime)
+        statusLabel.text = current.snapshot.statusLine(current.uptime)
         val tint = ReadingModeTint.displayed(
             enabled = preferences.colorsFloatingWindowByMode,
             reading = PowerMeter.shared.readingMode,
@@ -145,8 +144,6 @@ class OverlayController(
     }
 
     fun show() {
-        resultReady = false
-        restartButton.visibility = View.GONE
         renderCurrent()
         showPanel()
     }
@@ -161,8 +158,6 @@ class OverlayController(
 
     fun showStandby() {
         latest = null
-        resultReady = false
-        restartButton.visibility = View.GONE
         if (standbyAttached) return
         hide()
         applyPreferences()
@@ -201,6 +196,11 @@ class OverlayController(
 
     /** Applies to an attached window only; never reopens a hidden window or restarts capture. */
     private fun applyPreferences() {
+        val hideControls = preferences.hidesAfterDrawing
+        val controlsVisibility = if (hideControls) View.GONE else View.VISIBLE
+        val controlsChanged = controls.visibility != controlsVisibility
+        controls.visibility = controlsVisibility
+        glyphDiagram.contentDescription = if (hideControls) applicationContext.getString(R.string.drag_window) else null
         val metrics = applicationContext.resources.displayMetrics
         val screen = screenSize()
         placement.updateDisplay(screen.width, screen.height, metrics.density)
@@ -211,21 +211,20 @@ class OverlayController(
             availableWidthPixels = (metrics.widthPixels - horizontalMargin * 2).coerceAtLeast(1),
         )
         val diagramParams = glyphDiagram.layoutParams
-        val minimumControlWidth = closeButton.layoutParams.width + controls.layoutParams.height +
-            if (resultReady) restartButton.layoutParams.width else 0
+        val controlHeight = if (hideControls) 0 else controls.layoutParams.height
+        val minimumControlWidth = if (hideControls) 1 else closeButton.layoutParams.width + controlHeight
         val geometry = placement.fitCanvas(
             preferred = preferred,
             maximumWindowHeight = placement.maximumWindowHeight(
                 gameGeometry, screen.height, (8f * metrics.density).toInt(),
             ),
-            controlsHeight = controls.layoutParams.height + view.paddingTop + view.paddingBottom,
+            controlsHeight = controlHeight + view.paddingTop + view.paddingBottom,
             minimumWidth = minimumControlWidth,
             current = if (attached) OverlayWindowGeometry(diagramParams.width, diagramParams.height) else preferred,
         )
-        // A completed round adds controls to a canvas that may already have been narrowed.
-        val contentWidth = if (resultReady) maxOf(geometry.widthPixels, minimumControlWidth) else geometry.widthPixels
+        val contentWidth = geometry.widthPixels
         val contentHeight = geometry.canvasHeightPixels
-        val changed = layoutParams.width != contentWidth + view.paddingLeft + view.paddingRight ||
+        val changed = controlsChanged || layoutParams.width != contentWidth + view.paddingLeft + view.paddingRight ||
             diagramParams.width != geometry.widthPixels || diagramParams.height != contentHeight
         layoutParams.width = contentWidth + view.paddingLeft + view.paddingRight
         layoutParams.height = WindowManager.LayoutParams.WRAP_CONTENT
@@ -262,7 +261,8 @@ class OverlayController(
 
     private fun applyAutomaticPlacement() {
         if (!attached || view.height == 0) return
-        val expectedHeight = glyphDiagram.layoutParams.height + controls.layoutParams.height +
+        val controlHeight = if (controls.visibility == View.GONE) 0 else controls.layoutParams.height
+        val expectedHeight = glyphDiagram.layoutParams.height + controlHeight +
             view.paddingTop + view.paddingBottom
         // Resizing is asynchronous; place only after the new canvas height has been laid out.
         if (view.height != expectedHeight) return
@@ -291,8 +291,9 @@ class OverlayController(
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun installDragHandler() {
-        view.findViewById<View>(R.id.dragHandle).setOnTouchListener { handle, event ->
+    private fun installDragHandler(handle: View) {
+        handle.setOnTouchListener { target, event ->
+            if (target === glyphDiagram && controls.visibility != View.GONE) return@setOnTouchListener false
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     dragStartX = layoutParams.x
@@ -313,7 +314,7 @@ class OverlayController(
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    handle.performClick()
+                    target.performClick()
                     true
                 }
                 else -> false

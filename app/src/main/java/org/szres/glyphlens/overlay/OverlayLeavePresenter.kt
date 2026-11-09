@@ -4,16 +4,17 @@ import android.content.Context
 import android.content.Intent
 import org.szres.glyphlens.capture.CaptureService
 import org.szres.glyphlens.settings.AppPreferences
+import org.szres.glyphlens.settings.RecognitionMode
 
-/** Re-arms every ordinary app-leave path; an explicit user Hide applies only until the next leave. */
 object OverlayLeavePresenter {
     @JvmStatic
     fun onUserLeave(context: Context): Boolean {
         val visible = CaptureService.isOverlayVisible
-        val enabled = AppPreferences(context).showsFloatingWindow
+        val preferences = AppPreferences(context)
+        val enabled = preferences.showsFloatingWindow
         val state = CaptureService.currentState
-        if (state == CaptureService.SessionState.STOPPED || state == CaptureService.SessionState.STOPPING ||
-            !enabled || visible
+        if (state != CaptureService.SessionState.STANDBY ||
+            !enabled || visible || preferences.recognitionMode == RecognitionMode.REALTIME
         ) return false
         context.startService(Intent(context, CaptureService::class.java).setAction(CaptureService.ACTION_SHOW_OVERLAY))
         return true

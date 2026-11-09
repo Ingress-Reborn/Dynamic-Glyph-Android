@@ -3,18 +3,18 @@
     <string name="recognition_mode_title">Recognition mode</string>
     <string name="recognition_mode_realtime">Real time</string>
     <string name="recognition_mode_power_saving">Power saving</string>
-    <string name="recognition_mode_realtime_hint">Recognition starts as soon as screen sharing is authorized. Tap × to stop recognition and return to the icon.</string>
-    <string name="recognition_mode_power_saving_hint">After sharing your screen, tap the floating icon to start recognition. Tap × to stop and return to the icon. While waiting, frames and text are not processed; system screen-sharing authorization stays active.</string>
+    <string name="recognition_mode_realtime_hint">After screen sharing is authorized, recognition runs with the window hidden. A complete recognized or uniquely predicted sequence appears once per round. Tap × to hide it while recognition continues, or show it from the notification.</string>
+    <string name="recognition_mode_power_saving_hint">After sharing your screen, tap the floating icon to start recognition. With automatic hiding off, × stops recognition and returns to the icon. Standby does not process frames or text; screen-sharing authorization stays active.</string>
     <string name="status_standby">Standby. Tap the floating icon to start recognition.</string>
     <string name="status_standby_hidden">Standby. The floating icon is hidden; restore it from the home screen.</string>
     <string name="stop_sharing">Stop screen sharing</string>
     <string name="home_live_standby">Recognition is stopped. Tap the floating icon when you are ready.</string>
     <string name="notification_standby_text">Screen sharing remains authorized. Tap the icon to recognize; use Stop in this notification or the app to end sharing.</string>
     <string name="notification_standby_title">Glyph Lens is on standby</string>
-    <string name="auto_stop_after_round">Stop automatically after this round</string>
-    <string name="auto_stop_after_round_hint">Stops recognition when the sequence ends and the input phase begins. Keeps the result and a Start recognition button.</string>
-    <string name="status_result_ready">Recognition stopped. The result is kept; tap Start recognition when ready.</string>
-    <string name="status_result_ready_hidden">Recognition stopped. The result window is hidden; restore it from the home screen.</string>
-    <string name="notification_result_ready_title">Glyph result ready</string>
-    <string name="notification_result_ready_text">Recognition is stopped and the result is kept. Tap Start recognition in the window for another round, or Stop to end screen sharing.</string>
+    <string name="status_running_hidden">The window is hidden. Recognition continues in the background; a complete result appears automatically once per round. You can also show the window from the notification.</string>
+    <string name="notification_show_overlay">Show floating window</string>
+    <string name="notification_realtime_hidden_text">Recognition continues with the window hidden. Results appear once per round; tap Show floating window to open it now.</string>
+    <string name="overlay_hide">Hide floating window</string>
+    <string name="auto_hide_after_drawing">Hide automatically after drawing</string>
+    <string name="auto_hide_after_drawing_hint">When the game confirms drawing is complete, hide the window and keep recognizing the next round. The top control row is hidden; use the notification to show the window or stop recognition.</string>
 </resources>

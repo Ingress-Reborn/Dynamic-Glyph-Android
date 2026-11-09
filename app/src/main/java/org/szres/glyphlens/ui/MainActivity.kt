@@ -40,7 +40,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var overlayButton: Button
     private lateinit var statusText: TextView
     private lateinit var floatingSwitch: Switch
-    private lateinit var autoStopSwitch: Switch
+    private lateinit var autoHideSwitch: Switch
     private lateinit var recognitionModeGroup: RadioGroup
     private lateinit var liveStatus: TextView
     private lateinit var livePreview: OverlayPreviewView
@@ -94,7 +94,6 @@ class MainActivity : ComponentActivity() {
         override fun onReceive(context: Context, intent: Intent) {
             if (CaptureService.currentState == CaptureService.SessionState.RUNNING ||
                 CaptureService.currentState == CaptureService.SessionState.STANDBY ||
-                CaptureService.currentState == CaptureService.SessionState.RESULT_READY ||
                 CaptureService.currentState == CaptureService.SessionState.STOPPED
             ) awaitingStart = false
             lastMessage = intent.getStringExtra(CaptureService.EXTRA_MESSAGE)
@@ -116,7 +115,7 @@ class MainActivity : ComponentActivity() {
         overlayButton = findViewById(R.id.overlayButton)
         statusText = findViewById(R.id.statusText)
         floatingSwitch = findViewById(R.id.floatingWindowSwitch)
-        autoStopSwitch = findViewById(R.id.autoStopSwitch)
+        autoHideSwitch = findViewById(R.id.autoHideSwitch)
         recognitionModeGroup = findViewById(R.id.recognitionModeGroup)
         liveStatus = findViewById(R.id.homeLiveStatus)
         livePreview = findViewById(R.id.homeLivePreview)
@@ -129,7 +128,7 @@ class MainActivity : ComponentActivity() {
                     render()
                 } else startCapture()
                 CaptureService.SessionState.STARTING, CaptureService.SessionState.RUNNING,
-                CaptureService.SessionState.STANDBY, CaptureService.SessionState.RESULT_READY ->
+                CaptureService.SessionState.STANDBY ->
                     sendServiceAction(CaptureService.ACTION_STOP)
                 CaptureService.SessionState.STOPPING -> Unit
             }
@@ -146,9 +145,9 @@ class MainActivity : ComponentActivity() {
         }
         floatingSwitch.isChecked = preferences.showsFloatingWindow
         floatingSwitch.setOnCheckedChangeListener { _, checked -> preferences.showsFloatingWindow = checked }
-        autoStopSwitch.isChecked = preferences.stopsAfterRound
-        autoStopSwitch.setOnCheckedChangeListener { _, checked ->
-            preferences.stopsAfterRound = checked
+        autoHideSwitch.isChecked = preferences.hidesAfterDrawing
+        autoHideSwitch.setOnCheckedChangeListener { _, checked ->
+            preferences.hidesAfterDrawing = checked
             if (checked) preferences.showsFloatingWindow = true
             floatingSwitch.isChecked = preferences.showsFloatingWindow
             render()
@@ -163,7 +162,7 @@ class MainActivity : ComponentActivity() {
                 R.id.powerSavingModeButton -> RecognitionMode.POWER_SAVING
                 else -> return@setOnCheckedChangeListener
             }
-            if (preferences.recognitionMode == RecognitionMode.POWER_SAVING || preferences.stopsAfterRound) {
+            if (preferences.recognitionMode == RecognitionMode.POWER_SAVING || preferences.hidesAfterDrawing) {
                 preferences.showsFloatingWindow = true
             }
             floatingSwitch.isChecked = preferences.showsFloatingWindow
@@ -187,7 +186,8 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         resumed = true
         floatingSwitch.isChecked = preferences.showsFloatingWindow
-        autoStopSwitch.isChecked = preferences.stopsAfterRound
+        autoHideSwitch.isChecked = preferences.hidesAfterDrawing
+        if (CaptureService.currentState != CaptureService.SessionState.STOPPED) lastMessage = null
         render()
         mainHandler.post(liveTick)
     }
@@ -214,7 +214,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startCapture() {
-        if (preferences.recognitionMode == RecognitionMode.POWER_SAVING || preferences.stopsAfterRound) {
+        if (preferences.recognitionMode == RecognitionMode.POWER_SAVING || preferences.hidesAfterDrawing) {
             preferences.showsFloatingWindow = true
             floatingSwitch.isChecked = true
         }
@@ -271,31 +271,38 @@ class MainActivity : ComponentActivity() {
             (tables.assistsGlyphs || state != CaptureService.SessionState.STOPPED)
         primaryButton.setText(when {
             state == CaptureService.SessionState.RUNNING -> R.string.stop_capture
-            state == CaptureService.SessionState.STANDBY || state == CaptureService.SessionState.RESULT_READY ->
-                R.string.stop_sharing
+            state == CaptureService.SessionState.STANDBY -> R.string.stop_sharing
             state == CaptureService.SessionState.STARTING || awaitingStart -> R.string.cancel_capture
             state == CaptureService.SessionState.STOPPING -> R.string.stopping_capture
             else -> R.string.start_capture
         })
         overlayButton.visibility = if ((state == CaptureService.SessionState.RUNNING ||
-                state == CaptureService.SessionState.STANDBY || state == CaptureService.SessionState.RESULT_READY) &&
+                state == CaptureService.SessionState.STANDBY) &&
             preferences.showsFloatingWindow) {
             View.VISIBLE
         } else View.GONE
         overlayButton.setText(if (CaptureService.isOverlayVisible) R.string.hide_overlay else R.string.show_overlay)
         floatingSwitch.isEnabled = canChooseTables && preferences.recognitionMode == RecognitionMode.REALTIME &&
-            !preferences.stopsAfterRound
-        autoStopSwitch.isEnabled = canChooseTables
+            !preferences.hidesAfterDrawing
+        autoHideSwitch.isEnabled = canChooseTables
         findViewById<RadioButton>(R.id.realtimeModeButton).isEnabled = canChooseTables
         findViewById<RadioButton>(R.id.powerSavingModeButton).isEnabled = canChooseTables
         findViewById<TextView>(R.id.recognitionModeHint).setText(
             if (preferences.recognitionMode == RecognitionMode.REALTIME) R.string.recognition_mode_realtime_hint
             else R.string.recognition_mode_power_saving_hint,
         )
-        statusText.text = lastMessage ?: getString(when {
+        val hiddenStatus = when {
+            state == CaptureService.SessionState.RUNNING && !CaptureService.isOverlayVisible &&
+                preferences.showsFloatingWindow && (preferences.recognitionMode == RecognitionMode.REALTIME ||
+                    preferences.hidesAfterDrawing) ->
+                R.string.status_running_hidden
+            state == CaptureService.SessionState.STANDBY && !CaptureService.isOverlayVisible ->
+                R.string.status_standby_hidden
+            else -> null
+        }
+        statusText.text = hiddenStatus?.let(::getString) ?: lastMessage ?: getString(when {
             state == CaptureService.SessionState.RUNNING -> R.string.status_running
             state == CaptureService.SessionState.STANDBY -> R.string.status_standby
-            state == CaptureService.SessionState.RESULT_READY -> R.string.status_result_ready
             state == CaptureService.SessionState.STARTING -> R.string.status_starting
             state == CaptureService.SessionState.STOPPING -> R.string.status_stopping
             awaitingStart -> R.string.status_waiting
@@ -320,10 +327,8 @@ class MainActivity : ComponentActivity() {
             livePreview.visibility = View.GONE
             return
         }
-        val resultReady = CaptureService.currentState == CaptureService.SessionState.RESULT_READY
-        val uptime = if (resultReady) snapshot.evidenceArrivalUptime
-            else SystemClock.elapsedRealtimeNanos() / 1_000_000_000.0
-        liveStatus.text = if (resultReady) getString(R.string.status_result_ready) else snapshot.statusLine(uptime)
+        val uptime = SystemClock.elapsedRealtimeNanos() / 1_000_000_000.0
+        liveStatus.text = snapshot.statusLine(uptime)
         livePreview.visibility = View.VISIBLE
         livePreview.render(snapshot, tables.shapeTable, uptime, preferences.overlayCanvas)
     }

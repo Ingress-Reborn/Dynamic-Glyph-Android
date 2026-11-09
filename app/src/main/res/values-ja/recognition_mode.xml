@@ -3,18 +3,18 @@
     <string name="recognition_mode_title">認識モード</string>
     <string name="recognition_mode_realtime">リアルタイム</string>
     <string name="recognition_mode_power_saving">省電力</string>
-    <string name="recognition_mode_realtime_hint">画面共有を許可すると、すぐに認識を開始します。× をタップすると認識を停止し、フローティングアイコンに戻ります。</string>
-    <string name="recognition_mode_power_saving_hint">画面共有を許可した後、フローティングアイコンをタップすると認識を開始します。× をタップすると停止してアイコンに戻ります。待機中は画面や文字を処理せず、システムの画面共有の許可は維持されます。</string>
+    <string name="recognition_mode_realtime_hint">画面共有を許可すると、ウィンドウを隠したまま自動認識します。全項目の認識または一意の予測がそろうと、各ラウンドで一度だけ表示します。× はウィンドウだけを隠し、認識を続けます。通知からも再表示できます。</string>
+    <string name="recognition_mode_power_saving_hint">画面共有を許可した後、フローティングアイコンをタップすると認識を開始します。自動非表示がオフの場合、× で停止してアイコンに戻ります。待機中は画面や文字を処理せず、画面共有の許可は維持されます。</string>
     <string name="status_standby">待機中です。フローティングアイコンをタップして認識を開始してください。</string>
     <string name="status_standby_hidden">待機中です。フローティングアイコンは非表示になっています。ホーム画面から再表示できます。</string>
     <string name="stop_sharing">画面共有を停止</string>
     <string name="home_live_standby">認識は停止しています。準備ができたらフローティングアイコンをタップしてください。</string>
     <string name="notification_standby_text">画面共有の許可は維持されています。アイコンをタップすると認識を開始します。共有を終了するには、この通知またはアプリの停止ボタンを使ってください。</string>
     <string name="notification_standby_title">Glyph Lens は待機中です</string>
-    <string name="auto_stop_after_round">今回の認識が完了したら自動停止</string>
-    <string name="auto_stop_after_round_hint">シーケンスの表示が終わり入力段階に入ると、認識を停止します。結果と認識開始ボタンは表示したままになります。</string>
-    <string name="status_result_ready">今回の認識を停止しました。結果は保持されています。準備ができたら認識開始をタップしてください。</string>
-    <string name="status_result_ready_hidden">今回の認識を停止しました。結果ウィンドウは非表示になっています。ホーム画面から再表示できます。</string>
-    <string name="notification_result_ready_title">Glyph 認識結果を保持中</string>
-    <string name="notification_result_ready_text">認識は停止し、結果は保持されています。次の回を認識するにはウィンドウの認識開始をタップしてください。停止をタップすると画面共有を終了します。</string>
+    <string name="status_running_hidden">ウィンドウを隠して認識を続けています。結果がそろうと各ラウンドで一度だけ自動表示します。通知からもウィンドウを表示できます。</string>
+    <string name="notification_show_overlay">フローティングウィンドウを表示</string>
+    <string name="notification_realtime_hidden_text">ウィンドウを隠して認識を続けています。結果は各ラウンドで一度だけ自動表示します。今すぐ開くには「フローティングウィンドウを表示」をタップしてください。</string>
+    <string name="overlay_hide">フローティングウィンドウを隠す</string>
+    <string name="auto_hide_after_drawing">描画完了後に自動で隠す</string>
+    <string name="auto_hide_after_drawing_hint">ゲームが今回の描画完了を確認するとウィンドウを隠し、次のラウンドの認識を続けます。オンにすると上部の操作欄を隠します。通知からウィンドウを表示したり、認識を停止したりできます。</string>
 </resources>

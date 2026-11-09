@@ -397,6 +397,54 @@ class GlyphFrameRecognizerTest {
     }
 
     @Test
+    fun lowerArrayEdgeKeepsAliasesDistancesAndStrictExtensions() {
+        val table = glyphTable("bottom,9a\nreverse,a9\nextension,89a\ntop,01\nclear,05a")
+        val canvas = SyntheticRaster()
+        val fit = requireNotNull(NodeArrayDetector().detect(canvas.image()))
+        canvas.line(canvas.point(280.0, 346.0), canvas.point(160.0, 418.0))
+
+        val result = GlyphFrameRecognizer(table).observe(canvas.image(), fit)
+
+        assertEquals(GlyphFrameObservation.State.AMBIGUOUS_SHAPE, result.state)
+        assertEquals(setOf(GlyphPath.Edge(node(9), node(10))), result.edges)
+        assertEquals(
+            listOf(
+                GlyphCandidate(id("bottom"), 0), GlyphCandidate(id("reverse"), 0),
+                GlyphCandidate(id("extension"), 1), GlyphCandidate(id("top"), 2),
+            ),
+            result.candidates,
+        )
+        assertEquals(listOf(id("extension")), result.extensions)
+        assertEquals(
+            listOf(id("bottom"), id("reverse")),
+            GlyphFrameRecognizer(table, 0).observe(canvas.image(), fit).exactMatches,
+        )
+    }
+
+    @Test
+    fun switchingBetweenDistantEdgesDoesNotKeepPreviousCandidates() {
+        val recognizer = GlyphFrameRecognizer(glyphTable("bottom,9a\ntop,01"))
+        val blank = SyntheticRaster()
+        val fit = requireNotNull(NodeArrayDetector().detect(blank.image()))
+        for ((name, points) in listOf(
+            "top" to listOf(160.0 to 130.0, 40.0 to 202.0),
+            "bottom" to listOf(280.0 to 346.0, 160.0 to 418.0),
+        )) {
+            val canvas = blank.copy()
+            draw(canvas, points)
+            val result = recognizer.observe(canvas.image(), fit)
+            assertEquals(GlyphFrameObservation.State.UNIQUE_VISIBLE_SHAPE, result.state)
+            assertEquals(listOf(id(name)), result.exactMatches)
+            assertEquals(listOf(0, 2), result.candidates.map { it.distance })
+            assertTrue(result.extensions.isEmpty())
+        }
+        val empty = recognizer.observe(blank.image(), fit)
+        assertEquals(GlyphFrameObservation.State.NO_STROKE, empty.state)
+        assertTrue(empty.candidates.isEmpty())
+        assertTrue(empty.extensions.isEmpty())
+    }
+
+    @Test
     fun reflectedAsymmetricPixelShapesDoNotKeepOriginalName() {
         val cases = listOf(
             "see" to listOf(160.0 to 130.0, 220.0 to 238.0),

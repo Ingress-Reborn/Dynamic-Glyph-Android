@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="standby_icon_start">Start Glyph recognition</string>
-    <string name="overlay_result_ready">Recognition stopped</string>
-    <string name="overlay_start_recognition">Start recognition</string>
 </resources>

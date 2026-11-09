@@ -3,18 +3,18 @@
     <string name="recognition_mode_title">识别模式</string>
     <string name="recognition_mode_realtime">实时</string>
     <string name="recognition_mode_power_saving">省电</string>
-    <string name="recognition_mode_realtime_hint">授权屏幕共享后立即开始识别。点击 × 停止识别并回到悬浮图标。</string>
-    <string name="recognition_mode_power_saving_hint">授权屏幕共享后，点击悬浮图标开始识别。点击 × 停止识别并回到图标。待命时不处理画面和文字，系统屏幕共享授权仍保持。</string>
+    <string name="recognition_mode_realtime_hint">授权屏幕共享后，后台自动识别，整组识别或唯一预测就绪后显示窗口，每轮一次。点击 × 完全隐藏窗口并继续识别，也可从通知栏显示悬浮窗。</string>
+    <string name="recognition_mode_power_saving_hint">授权屏幕共享后，点击悬浮图标开始识别。未开启自动隐藏时，点击 × 停止识别并回到图标。待命时不处理画面和文字，系统屏幕共享授权仍保持。</string>
     <string name="status_standby">待命中。点击悬浮图标开始识别。</string>
     <string name="status_standby_hidden">待命中。悬浮图标已隐藏，可在首页恢复显示。</string>
     <string name="stop_sharing">停止屏幕共享</string>
     <string name="home_live_standby">识别已停止。准备好后，点击悬浮图标开始。</string>
     <string name="notification_standby_text">屏幕共享授权保持中。点击悬浮图标开始识别；使用本通知或应用中的停止按钮结束共享。</string>
     <string name="notification_standby_title">Glyph Lens 正在待命</string>
-    <string name="auto_stop_after_round">本轮识别完成后自动停止</string>
-    <string name="auto_stop_after_round_hint">展示结束进入输入阶段后停止识别，保留结果和开始识别按钮。</string>
-    <string name="status_result_ready">本轮识别已停止，结果已保留；准备好后点击开始识别。</string>
-    <string name="status_result_ready_hidden">本轮识别已停止。结果窗口已隐藏，可在首页恢复显示。</string>
-    <string name="notification_result_ready_title">Glyph 识别结果已保留</string>
-    <string name="notification_result_ready_text">识别已停止，结果已保留。点击窗口中的开始识别进行下一轮，或点击停止结束屏幕共享。</string>
+    <string name="status_running_hidden">窗口已隐藏，后台继续识别。完整结果就绪后每轮自动显示一次，也可从通知栏显示悬浮窗。</string>
+    <string name="notification_show_overlay">显示悬浮窗</string>
+    <string name="notification_realtime_hidden_text">窗口已隐藏，识别继续运行。结果就绪后每轮自动显示一次，也可点击显示悬浮窗。</string>
+    <string name="overlay_hide">隐藏悬浮窗</string>
+    <string name="auto_hide_after_drawing">绘制完成后自动隐藏</string>
+    <string name="auto_hide_after_drawing_hint">游戏确认本轮绘制结束后隐藏窗口，并继续识别下一轮。开启后隐藏顶部控制行，可从通知栏显示窗口或停止识别。</string>
 </resources>

@@ -29,7 +29,7 @@ class AppPreferencesInstrumentedTest {
     @Test
     fun defaultsEnableWindowAndAutomaticLanguage() {
         assertEquals(RecognitionMode.REALTIME, preferences.recognitionMode)
-        assertFalse(preferences.stopsAfterRound)
+        assertFalse(preferences.hidesAfterDrawing)
         assertTrue(preferences.showsFloatingWindow)
         assertNull(preferences.gameLanguage)
         assertFalse(preferences.colorsFloatingWindowByMode)
@@ -49,16 +49,28 @@ class AppPreferencesInstrumentedTest {
     }
 
     @Test
-    fun stoppingAfterRoundPersistsIndependentlyOfRecognitionMode() {
-        preferences.stopsAfterRound = true
+    fun automaticHidingPersistsIndependentlyOfRecognitionMode() {
+        preferences.hidesAfterDrawing = true
         preferences.recognitionMode = RecognitionMode.POWER_SAVING
 
         val reopened = AppPreferences(context)
-        assertTrue(reopened.stopsAfterRound)
+        assertTrue(reopened.hidesAfterDrawing)
         reopened.recognitionMode = RecognitionMode.REALTIME
-        assertTrue(AppPreferences(context).stopsAfterRound)
-        reopened.stopsAfterRound = false
-        assertFalse(AppPreferences(context).stopsAfterRound)
+        assertTrue(AppPreferences(context).hidesAfterDrawing)
+        reopened.hidesAfterDrawing = false
+        assertFalse(AppPreferences(context).hidesAfterDrawing)
+    }
+
+    @Test
+    fun removedAutomaticStopPreferenceDoesNotEnableAutomaticHiding() {
+        val store = context.getSharedPreferences(AppPreferences.PREFERENCES_NAME, Context.MODE_PRIVATE)
+        store.edit().putBoolean("capture.stopsAfterRound", true).commit()
+
+        assertFalse(AppPreferences(context).hidesAfterDrawing)
+        assertFalse(store.contains(AppPreferences.AUTO_HIDE_KEY))
+        preferences.hidesAfterDrawing = true
+        assertTrue(store.getBoolean(AppPreferences.AUTO_HIDE_KEY, false))
+        assertTrue(AppPreferences(context).hidesAfterDrawing)
     }
 
     @Test

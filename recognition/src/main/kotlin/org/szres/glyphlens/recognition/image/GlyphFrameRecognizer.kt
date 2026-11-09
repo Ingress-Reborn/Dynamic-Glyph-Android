@@ -62,7 +62,7 @@ class GlyphFrameRecognizer(
     table: GlyphTable,
     val maxEdgeDistance: Int = 2,
 ) {
-    private data class Template(val id: GlyphID, val edges: Set<GlyphPath.Edge>)
+    private data class Template(val id: GlyphID, val edges: Set<GlyphPath.Edge>, val edgeMask: Long)
 
     private val templates: List<Template>
     private var samplingPlan: SamplingPlan? = null
@@ -78,7 +78,12 @@ class GlyphFrameRecognizer(
         require(maxEdgeDistance >= 0) { "Maximum edge distance cannot be negative" }
         templates = table.glyphs.mapNotNull { id ->
             table.path(forID = id)?.let { path ->
-                Template(id, GlyphGeometry.normalizedEdges(path.undirectedEdges))
+                val edges = GlyphGeometry.normalizedEdges(path.undirectedEdges)
+                var mask = 0L
+                GlyphGeometry.elementaryEdges.forEachIndexed { index, edge ->
+                    if (edge in edges) mask = mask or (1L shl index)
+                }
+                Template(id, edges, mask)
             }
         }
     }
@@ -124,21 +129,18 @@ class GlyphFrameRecognizer(
         calibration: NodeArrayDetection,
         inkSamples: List<Int>,
     ): GlyphFrameObservation {
-        val edges = evidence.filter { it.isPresent }.mapTo(linkedSetOf()) { it.edge }
-        val candidates = if (edges.isEmpty()) emptyList() else templates.map { template ->
-            GlyphCandidate(
-                id = template.id,
-                distance = (edges - template.edges).size + (template.edges - edges).size,
-            )
-        }.filter { it.distance <= maxEdgeDistance }.sorted()
+        var edgeMask = 0L
+        evidence.forEachIndexed { index, sample -> if (sample.isPresent) edgeMask = edgeMask or (1L shl index) }
+        val candidates = if (edgeMask == 0L) emptyList() else templates.mapNotNull { template ->
+            val distance = java.lang.Long.bitCount(edgeMask xor template.edgeMask)
+            if (distance <= maxEdgeDistance) GlyphCandidate(template.id, distance) else null
+        }.sorted()
         val exactCount = candidates.count { it.distance == 0 }
-        val extensions = if (edges.isEmpty()) emptyList() else templates.filter { template ->
-            edges.size < template.edges.size && template.edges.containsAll(edges)
+        val extensions = if (edgeMask == 0L) emptyList() else templates.filter { template ->
+            edgeMask != template.edgeMask && (edgeMask and template.edgeMask) == edgeMask
         }.map { it.id }
 
         val plan = planFor(calibration)
-        var edgeMask = 0L
-        evidence.forEachIndexed { index, sample -> if (sample.isPresent) edgeMask = edgeMask or (1L shl index) }
         val unexplainedSamples = inkSamples.count { plan.inkEdges[it] and edgeMask == 0L }
         val inkArea = inkSamples.size * plan.inkSampleArea
         val unexplainedArea = unexplainedSamples * plan.inkSampleArea
@@ -148,7 +150,7 @@ class GlyphFrameRecognizer(
             exactCount > 0 && excessiveInk -> GlyphFrameObservation.State.UNEXPLAINED_INK
             exactCount == 1 -> GlyphFrameObservation.State.UNIQUE_VISIBLE_SHAPE
             exactCount > 1 -> GlyphFrameObservation.State.AMBIGUOUS_SHAPE
-            edges.isEmpty() && inkArea < max(6, (calibration.size.x * 0.025).toInt()) ->
+            edgeMask == 0L && inkArea < max(6, (calibration.size.x * 0.025).toInt()) ->
                 GlyphFrameObservation.State.NO_STROKE
             else -> GlyphFrameObservation.State.UNRECOGNIZED_STROKE
         }

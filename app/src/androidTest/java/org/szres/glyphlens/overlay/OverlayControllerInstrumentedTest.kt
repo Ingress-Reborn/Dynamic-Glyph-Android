@@ -34,6 +34,7 @@ import org.szres.glyphlens.settings.AppPreferences
 import org.szres.glyphlens.settings.OverlayCanvasConfiguration
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 class OverlayControllerInstrumentedTest {
@@ -44,6 +45,7 @@ class OverlayControllerInstrumentedTest {
     private val stops = AtomicInteger()
     private lateinit var controller: OverlayController
     private var originalAccessibilityFlags: Int? = null
+    private var originalAutoHide: Boolean? = null
 
     @Before
     fun prepareRealOverlay() {
@@ -54,6 +56,9 @@ class OverlayControllerInstrumentedTest {
                 AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS
         }
         instrumentation.runOnMainSync {
+            val preferences = AppPreferences(context)
+            originalAutoHide = preferences.hidesAfterDrawing
+            preferences.hidesAfterDrawing = false
             controller = OverlayController(
                 context,
                 onStartRecognition = {
@@ -70,7 +75,10 @@ class OverlayControllerInstrumentedTest {
 
     @After
     fun removeOverlay() {
-        if (::controller.isInitialized) instrumentation.runOnMainSync { controller.hide() }
+        instrumentation.runOnMainSync {
+            if (::controller.isInitialized) controller.hide()
+            originalAutoHide?.let { AppPreferences(context).hidesAfterDrawing = it }
+        }
         originalAccessibilityFlags?.let { previous ->
             automation.serviceInfo = automation.serviceInfo.apply { flags = previous }
         }
@@ -131,15 +139,11 @@ class OverlayControllerInstrumentedTest {
     }
 
     @Test
-    fun frozenResultSurvivesPreferenceChangeAndCanRestartOrClose() {
+    fun automaticHideRemovesTheControlRowAndKeepsAVisibleDraggableCanvas() {
         val preferences = AppPreferences(context)
         val previousColors = preferences.colorsFloatingWindowByMode
         val previousCaptureProtection = preferences.protectsFloatingWindowFromCapture
         val previousCanvas = preferences.overlayCanvas
-        val density = context.resources.displayMetrics.density
-        val screen = checkNotNull(automation.takeScreenshot())
-        val narrowGapFraction = 144.0 * density / screen.height
-        screen.recycle()
         val table = GlyphTable.parse("see,03\nbegin,06a7")
         val snapshot = GlyphDisplaySnapshot(
             captureSessionID = CaptureSessionID(1UL),
@@ -164,59 +168,84 @@ class OverlayControllerInstrumentedTest {
             outlook = SequenceOutlook.unavailable,
             calibrationSummary = "11 rings",
         )
-        val resultStatus = context.getString(R.string.overlay_result_ready)
 
         try {
             instrumentation.runOnMainSync {
                 preferences.colorsFloatingWindowByMode = false
                 preferences.protectsFloatingWindowFromCapture = false
-                preferences.overlayCanvas = OverlayCanvasConfiguration(width = 256, height = 192)
+                preferences.overlayCanvas = OverlayCanvasConfiguration.standard
+                controller.updateGameGeometry(OverlayGameGeometry(arrayTopFraction = 0.70, timerBottomFraction = 0.40))
+                controller.render(snapshot, table, uptime = 10.0)
                 controller.show()
-                controller.updateGameGeometry(
-                    OverlayGameGeometry(arrayTopFraction = 0.65, timerBottomFraction = 0.65 - narrowGapFraction),
-                )
             }
-            val narrowBounds = Rect()
-            awaitUi("The fixture did not produce a narrow recognition window") {
-                node("closeOverlay")?.window?.getBoundsInScreen(narrowBounds)
-                narrowBounds.width() > 0 && narrowBounds.width() < 148f * density
+            val title = awaitNode("dragHandle")
+            val titleBounds = Rect().also { title.getBoundsInScreen(it) }
+            val originalWindow = Rect().also { checkNotNull(title.window).getBoundsInScreen(it) }
+            val originalCanvas = Rect().also { awaitNode("glyphDiagram").getBoundsInScreen(it) }
+            assertTrue(titleBounds.height() > 0)
+            assertTrue(originalWindow.contains(originalCanvas))
+
+            instrumentation.runOnMainSync { preferences.hidesAfterDrawing = true }
+            val canvas = Rect()
+            val compactWindow = Rect()
+            var controlsState = "Not inspected"
+            awaitUi(
+                "Automatic hiding must remove the entire control row without losing the Glyph canvas",
+                diagnostics = {
+                    "originalWindow=$originalWindow title=$titleBounds originalCanvas=$originalCanvas " +
+                        "compactWindow=$compactWindow canvas=$canvas controls=[$controlsState]"
+                },
+            ) {
+                val diagram = node("glyphDiagram") ?: run {
+                    controlsState = "Glyph canvas node is missing"
+                    return@awaitUi false
+                }
+                diagram.getBoundsInScreen(canvas)
+                diagram.window?.getBoundsInScreen(compactWindow)
+                val titleNode = node("dragHandle")
+                val closeNode = node("closeOverlay")
+                val controlsNode = node("overlayControls")
+                controlsState = "title=${titleNode != null}/${titleNode?.isVisibleToUser} " +
+                    "close=${closeNode != null}/${closeNode?.isVisibleToUser} " +
+                    "row=${controlsNode != null}/${controlsNode?.isVisibleToUser} " +
+                    "canvasVisible=${diagram.isVisibleToUser} window=${diagram.window?.id}"
+                titleNode == null && closeNode == null &&
+                    controlsNode == null && !canvas.isEmpty && compactWindow.contains(canvas) &&
+                    // Accessibility rounds the window and child screen bounds independently.
+                    abs(compactWindow.height() - (originalWindow.height() - titleBounds.height())) <= 1
             }
-            instrumentation.runOnMainSync {
-                controller.showResult(snapshot, table, uptime = 10.0)
-                assertTrue(controller.isVisible)
-                assertFalse(controller.isStandbyVisible)
-            }
-            awaitNode("restartRecognitionButton")
-            awaitUi("The completed round did not display its paused result status") {
-                node("dragHandle")?.text?.toString() == resultStatus && node("startRecognitionIcon") == null
-            }
-            awaitResultControlsInsidePanel()
-            saveScreenshot("frozen-result.png")
+            assertEquals("Removing controls must preserve the configured canvas width", originalCanvas.width(), canvas.width())
+            assertEquals("Removing controls must preserve the configured canvas height", originalCanvas.height(), canvas.height())
+            assertEquals("The diagram remains the drag handle", context.getString(R.string.drag_window),
+                awaitNode("glyphDiagram").contentDescription?.toString())
+            saveScreenshot("auto-hide-canvas-only.png")
 
             instrumentation.runOnMainSync { preferences.colorsFloatingWindowByMode = true }
             instrumentation.waitForIdleSync()
-            assertEquals(resultStatus, awaitNode("dragHandle").text.toString())
-            val restart = awaitNode("restartRecognitionButton")
-            awaitResultControlsInsidePanel()
-            assertEquals("Changing appearance must not start another round", 0, starts.get())
-            saveScreenshot("frozen-result-after-preference.png")
+            assertEquals(null, node("dragHandle"))
+            assertEquals(null, node("closeOverlay"))
+            assertEquals("Appearance changes must not start recognition", 0, starts.get())
+            assertEquals("Appearance changes must not stop recognition", 0, stops.get())
 
-            assertTrue(restart.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-            awaitUi("Restart kept the result-only controls visible") {
-                node("restartRecognitionButton") == null &&
-                    node("dragHandle")?.text?.toString() == snapshot.statusLine(10.0)
+            val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+            gesture(canvas.exactCenterX(), canvas.exactCenterY(), touchSlop * 3f)
+            val moved = Rect()
+            awaitUi("The canvas-only window must remain draggable") {
+                node("glyphDiagram")?.window?.getBoundsInScreen(moved)
+                moved.left - compactWindow.left > touchSlop
             }
-            assertEquals(1, starts.get())
-            instrumentation.runOnMainSync {
-                assertTrue(controller.isVisible)
-                assertFalse(controller.isStandbyVisible)
-            }
+            assertEquals(0, starts.get())
+            assertEquals(0, stops.get())
+            saveScreenshot("auto-hide-canvas-dragged.png")
+
+            instrumentation.runOnMainSync { preferences.hidesAfterDrawing = false }
+            val restoredTitle = awaitNode("dragHandle")
+            val restored = Rect().also { checkNotNull(restoredTitle.window).getBoundsInScreen(it) }
+            awaitNode("closeOverlay")
+            assertEquals("Showing controls must retain the user's horizontal position", moved.left, restored.left)
             assertTrue(awaitNode("closeOverlay").performAction(AccessibilityNodeInfo.ACTION_CLICK))
             awaitNode("startRecognitionIcon")
             assertEquals(1, stops.get())
-            awaitUi("Closing the recognition panel left its result controls attached") {
-                node("closeOverlay") == null && node("restartRecognitionButton") == null
-            }
         } finally {
             instrumentation.runOnMainSync {
                 controller.hide()
@@ -224,22 +253,6 @@ class OverlayControllerInstrumentedTest {
                 preferences.protectsFloatingWindowFromCapture = previousCaptureProtection
                 preferences.overlayCanvas = previousCanvas
             }
-        }
-    }
-
-    private fun awaitResultControlsInsidePanel() {
-        awaitUi("The paused result clipped its restart button, close button, or drag title") {
-            val close = node("closeOverlay") ?: return@awaitUi false
-            val restart = node("restartRecognitionButton") ?: return@awaitUi false
-            val title = node("dragHandle") ?: return@awaitUi false
-            val window = close.window ?: return@awaitUi false
-            val windowBounds = Rect().also { window.getBoundsInScreen(it) }
-            val closeBounds = Rect().also { close.getBoundsInScreen(it) }
-            val restartBounds = Rect().also { restart.getBoundsInScreen(it) }
-            val titleBounds = Rect().also { title.getBoundsInScreen(it) }
-            !closeBounds.isEmpty && !restartBounds.isEmpty && !titleBounds.isEmpty &&
-                windowBounds.contains(closeBounds) && windowBounds.contains(restartBounds) &&
-                windowBounds.contains(titleBounds)
         }
     }
 
@@ -286,13 +299,14 @@ class OverlayControllerInstrumentedTest {
         return checkNotNull(found)
     }
 
-    private fun awaitUi(message: String, condition: () -> Boolean) {
+    private fun awaitUi(message: String, diagnostics: () -> String = { "" }, condition: () -> Boolean) {
         val deadline = SystemClock.uptimeMillis() + 5_000
         while (SystemClock.uptimeMillis() < deadline) {
             if (condition()) return
             SystemClock.sleep(50)
         }
-        throw AssertionError(message)
+        val details = diagnostics()
+        throw AssertionError(if (details.isEmpty()) message else "$message: $details")
     }
 
     private fun node(id: String): AccessibilityNodeInfo? {

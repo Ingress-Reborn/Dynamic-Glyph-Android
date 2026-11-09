@@ -1,0 +1,3 @@
+# Keep bundled table bytes identical to the pinned reference hashes on every platform.
+app/src/main/assets/glyph_line.csv text eol=lf
+app/src/main/assets/glyph.csv text eol=crlf

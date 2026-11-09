@@ -8,6 +8,27 @@ import org.szres.glyphlens.settings.OverlayWindowGeometry
 
 class OverlayPlacementTest {
     @Test
+    fun automaticResultPlacementReleasesADragAndUsesTheCurrentGap() {
+        val placement = OverlayPlacement()
+        val oldGeometry = OverlayGameGeometry(0.5, 0.3)
+        placement.updateDisplay(720, 1280, 2f)
+        placement.maximumWindowHeight(oldGeometry, 1280, 16)
+        placement.top(oldGeometry, 1280, 150, 16)
+        placement.userMoved()
+        assertNull(placement.top(oldGeometry, 1280, 150, 16))
+
+        placement.resetAutomaticPlacement()
+        val currentGeometry = OverlayGameGeometry(0.369, timerBottomEstimateFraction = 0.246)
+        val maximum = placement.maximumWindowHeight(currentGeometry, 1280, 16)
+        val fitted = placement.fitCanvas(OverlayWindowGeometry(656, 66), maximum, 96, 160)
+        assertEquals(OverlayWindowGeometry(288, 29), fitted)
+        val top = placement.top(currentGeometry, 1280, fitted.canvasHeightPixels + 96, 16)!!
+        assertEquals(331, top)
+        assertTrue(top + fitted.canvasHeightPixels + 96 + 16 <= 472)
+        assertNull(placement.top(currentGeometry, 1280, fitted.canvasHeightPixels + 96, 16))
+    }
+
+    @Test
     fun anAutomaticPositionIsRecomputedWhenTheDisplayDimensionsChange() {
         val placement = OverlayPlacement()
         placement.updateDisplay(1080, 2144, 2f)

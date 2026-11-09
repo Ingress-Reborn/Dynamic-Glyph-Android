@@ -60,17 +60,17 @@
             android:textColor="@color/secondary_text"
             android:textSize="14sp" />
         <Switch
-            android:id="@+id/autoStopSwitch"
+            android:id="@+id/autoHideSwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:minHeight="48dp"
-            android:text="@string/auto_stop_after_round"
+            android:text="@string/auto_hide_after_drawing"
             android:textColor="@color/primary_text" />
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            android:text="@string/auto_stop_after_round_hint"
+            android:text="@string/auto_hide_after_drawing_hint"
             android:textColor="@color/secondary_text"
             android:textSize="14sp" />
         <TextView

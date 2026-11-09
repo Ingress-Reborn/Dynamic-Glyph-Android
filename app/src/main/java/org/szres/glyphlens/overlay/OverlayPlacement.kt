@@ -29,6 +29,11 @@ internal class OverlayPlacement {
         if (size == previous) return
         displaySize = size
         if (previous == null || movedByUser) return
+        resetAutomaticPlacement()
+    }
+
+    fun resetAutomaticPlacement() {
+        movedByUser = false
         placedAboveArray = false
         placedUsingEstimate = false
         placedAfterTimer = false

@@ -137,11 +137,31 @@ class GameUILayoutLocatorTest {
     }
 
     @Test
+    fun locatesFiveAdjacentGoldAndVioletOutlinesAcrossDarkBackground() {
+        val lefts = listOf(69, 165, 261, 357, 453)
+        val viewport = Viewport(603, 1508, 1.0, 0, 98)
+        for (highlight in listOf(0, 4)) {
+            val frame = viewport.place(scene(SyntheticSlotBands.outlinedBoxes(lefts, highlight).band()))
+            assertTrue(SlotStripReader().read(frame).isFailure)
+            val fit = requireNotNull(NodeArrayDetector().detect(frame.luminance))
+            val locator = GameUILayoutLocator()
+            locator.observe(frame.topBand.image, fit, 0.0)
+
+            val reading = locator.lastSlotResult.getOrThrow()
+            assertEquals(5, reading.slotCount)
+            assertEquals(highlight, reading.highlightedIndex)
+            for ((index, left) in lefts.withIndex()) {
+                assertEquals((left + 39.5) / viewport.width, reading.markerCentersX[index], 0.001)
+            }
+        }
+    }
+
+    @Test
     fun highlightedMarkersDetachedInnerOutlineIsNotAnExtraSlot() {
-        val source = scene(SyntheticSlotBands.timer())
+        val source = scene(SyntheticSlotBands.outlinedBoxes().band())
         for (y in 157..212) {
             for (x in 129..184) {
-                if (x in 132..181 && y in 160..209) continue
+                if (x in 136..177 && y in 164..205) continue
                 val offset = (y * source.width + x) * 3
                 source.pixels[offset] = 240.toByte()
                 source.pixels[offset + 1] = 180.toByte()
@@ -149,11 +169,16 @@ class GameUILayoutLocatorTest {
             }
         }
         val frame = Viewport(603, 1508, 1.0, 0, 98).place(source)
+        assertTrue(SlotStripReader().read(frame).isFailure)
         val fit = requireNotNull(NodeArrayDetector().detect(frame.luminance))
         val locator = GameUILayoutLocator()
         locator.observe(frame.topBand.image, fit, 0.0)
-        assertEquals(4, locator.lastSlotResult.getOrThrow().slotCount)
-        assertEquals(0, locator.lastSlotResult.getOrThrow().highlightedIndex)
+        val reading = locator.lastSlotResult.getOrThrow()
+        assertEquals(4, reading.slotCount)
+        assertEquals(0, reading.highlightedIndex)
+        for ((index, left) in listOf(117, 213, 309, 405).withIndex()) {
+            assertEquals((left + 39.5) / frame.luminance.width, reading.markerCentersX[index], 0.001)
+        }
     }
 
     private fun scene(band: FrameTopBand): ColorImage {

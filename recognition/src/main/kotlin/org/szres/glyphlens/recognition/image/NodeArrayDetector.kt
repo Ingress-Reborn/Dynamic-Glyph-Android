@@ -189,11 +189,12 @@ class NodeArrayDetector {
         val stack = ArrayDeque<Int>()
         val rings = mutableListOf<Ring>()
         for (start in visited.indices) {
+            if (visited[start]) continue
+            visited[start] = true
             val startX = start % regionWidth + left
             val startY = start / regionWidth + top
-            if (image[startY * width + startX] < 160 || visited[start]) continue
+            if (image[startY * width + startX] < 160) continue
             stack.addLast(start)
-            visited[start] = true
             var count = 0
             var sx = 0.0
             var sy = 0.0
@@ -215,10 +216,9 @@ class NodeArrayDetector {
                 for (ny in max(top, y - 1)..min(bottom - 1, y + 1)) {
                     for (nx in max(left, x - 1)..min(right - 1, x + 1)) {
                         val next = (ny - top) * regionWidth + nx - left
-                        if (!visited[next] && image[ny * width + nx] >= 160) {
-                            visited[next] = true
-                            stack.addLast(next)
-                        }
+                        if (visited[next]) continue
+                        visited[next] = true
+                        if (image[ny * width + nx] >= 160) stack.addLast(next)
                     }
                 }
             }

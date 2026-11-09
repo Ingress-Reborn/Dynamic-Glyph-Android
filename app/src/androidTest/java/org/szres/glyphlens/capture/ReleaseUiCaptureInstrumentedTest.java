@@ -10,6 +10,7 @@ import android.app.UiAutomation;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
 import android.provider.Settings;
@@ -52,30 +53,41 @@ public final class ReleaseUiCaptureInstrumentedTest {
 
     @Test
     public void fiveGlyphReleaseJourneyProducesVisualEvidence() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, false);
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, false, false);
     }
 
     @Test
     public void threeGlyphReleaseJourneyProducesVisualEvidence() throws Throwable {
-        verifyJourney("real-recording-093906.mp4", new String[] {"nourish", "xm", "portal"}, false, false);
+        verifyJourney("real-recording-093906.mp4", new String[] {"nourish", "xm", "portal"}, false, false, false);
     }
 
     @Test
     public void powerSavingReleaseJourneyStartsAndResumesFromIcon() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, false);
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, false, false);
     }
 
     @Test
-    public void autoStopReleaseJourneyRetainsResultAndRestartsRecognition() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, true);
+    public void autoHideReleaseJourneyHidesAfterDrawingAndContinues() throws Throwable {
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, true, false);
+    }
+
+    @Test
+    public void powerSavingAutoHideReleaseJourneyContinuesAfterDrawing() throws Throwable {
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, true, false);
+    }
+
+    @Test
+    public void realtimeHiddenReleaseJourneyRevealsPredictionsAndRestoresFromNotification() throws Throwable {
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, false, true);
     }
 
     private void verifyJourney(String fileName, String[] expectedSequence, boolean powerSaving,
-            boolean autoStop) throws Throwable {
+            boolean autoHide, boolean hiddenJourney) throws Throwable {
         File source = new File(context.getExternalFilesDir(null), fileName);
         File output = new File(context.getExternalFilesDir(null), "live-release-tests/"
                 + fileName.replace(".mp4", "") + (powerSaving ? "-power-saving" : "-realtime")
-                + (autoStop ? "-auto-stop" : "")
+                + (autoHide ? "-auto-hide" : "")
+                + (hiddenJourney ? "-hidden" : "")
                 + "-" + System.currentTimeMillis());
         assertTrue("Cannot create visual evidence directory", output.mkdirs());
         JSONObject report = new JSONObject();
@@ -84,7 +96,8 @@ public final class ReleaseUiCaptureInstrumentedTest {
         report.put("glyphVerification", "Manual review of screenshots required; no per-Glyph assertion");
         report.put("performanceMeasurement", "Not measured: periodic screenshots affect CPU usage");
         report.put("recognitionMode", powerSaving ? "powerSaving" : "realtime");
-        report.put("stopsAfterRound", autoStop);
+        report.put("hidesAfterDrawing", autoHide);
+        report.put("startsWithHiddenWindow", !powerSaving || autoHide);
         report.put("playerProcess", instrumentation.getContext().getPackageName() + ":fixture_video");
         AccessibilityServiceInfo serviceInfo = automation.getServiceInfo();
         int previousFlags = serviceInfo.flags;
@@ -95,7 +108,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
         boolean playerStarted = false;
         Boolean previousFloatingWindow = null;
         Boolean previousPowerSaving = null;
-        Boolean previousAutoStop = null;
+        Boolean previousAutoHide = null;
         try {
             File playbackSource = fixtureForPlayer(source);
             assertTrue("Grant display-over-other-apps before this test", Settings.canDrawOverlays(context));
@@ -103,15 +116,15 @@ public final class ReleaseUiCaptureInstrumentedTest {
             AccessibilityNodeInfo primary = awaitNode("primaryButton", 15_000);
             assertEquals("Capture must be stopped before the UI journey", appString("start_capture"), text(primary));
             previousPowerSaving = awaitNode("powerSavingModeButton", 5_000).isChecked();
-            previousAutoStop = awaitNode("autoStopSwitch", 5_000).isChecked();
+            previousAutoHide = awaitNode("autoHideSwitch", 5_000).isChecked();
             // Both optional modes lock the floating switch on; unlock it before reading or restoring it.
-            selectAutoStop(false);
+            selectAutoHide(false);
             selectMode(false);
             AccessibilityNodeInfo floatingSwitch = awaitNode("floatingWindowSwitch", 5_000);
             previousFloatingWindow = floatingSwitch.isChecked();
             if (!floatingSwitch.isChecked()) click(floatingSwitch);
             selectMode(powerSaving);
-            selectAutoStop(autoStop);
+            selectAutoHide(autoHide);
             saveScreenshot(new File(output, "home-mode.png"));
             report.put("homeModeScreenshot", "home-mode.png");
             requestedCapture = true;
@@ -119,6 +132,11 @@ public final class ReleaseUiCaptureInstrumentedTest {
             grantWholeScreenProjection();
             report.put("systemConsentApprovals", 1);
             awaitButtonText(appString(powerSaving ? "stop_sharing" : "stop_capture"), 15_000);
+            if (!powerSaving) {
+                JSONObject hidden = new JSONObject();
+                report.put("beforePlaybackHidden", hidden);
+                observeHidden(output, "before-playback-hidden", hidden);
+            }
             playFixture(playbackSource);
             playerStarted = true;
             if (powerSaving) {
@@ -126,11 +144,13 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 report.put("initialStandby", standby);
                 observeStandby(output, "initial-standby", standby);
                 click(awaitNode("startRecognitionIcon", 5_000));
-                awaitNode("dragHandle", 10_000);
+                if (autoHide) awaitNoFloatingSurface();
+                else awaitRecognitionPanel();
                 playFixture(playbackSource);
             }
-            observePhases(output, report, autoStop);
-            if (powerSaving) {
+            if (autoHide) observeAutoHideCycle(output, report);
+            else observePhases(output, report, !powerSaving);
+            if (powerSaving && !autoHide) {
                 click(awaitNode("closeOverlay", 5_000));
                 JSONObject standby = new JSONObject();
                 report.put("afterClose", standby);
@@ -148,31 +168,55 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 observePhases(resumedOutput, resumed, false);
                 report.put("resumedWithoutAnotherConsent", true);
             }
-            if (autoStop) {
-                click(awaitNode("restartRecognitionButton", 5_000));
-                awaitRecognitionPanel();
-                JSONObject restartBeforeReplay = new JSONObject();
-                report.put("restartBeforeReplay", restartBeforeReplay);
-                observeRestartBeforeReplay(output, restartBeforeReplay);
+            if (autoHide) {
+                assertNoProjectionConsent();
                 playFixture(playbackSource);
-                File restartedOutput = new File(output, "restarted");
-                assertTrue("Cannot create restarted visual evidence directory", restartedOutput.mkdirs());
-                JSONObject restarted = new JSONObject();
-                restarted.put("screenshotDirectory", "restarted");
-                restarted.put("glyphVerification", "Manual review of screenshots required; no per-Glyph assertion");
-                report.put("restartedJourney", restarted);
-                observePhases(restartedOutput, restarted, true);
-                report.put("restartedWithoutAnotherConsent", true);
+                File nextOutput = new File(output, "next-round");
+                assertTrue("Cannot create next-round visual evidence directory", nextOutput.mkdirs());
+                JSONObject next = new JSONObject();
+                next.put("screenshotDirectory", "next-round");
+                next.put("glyphVerification", "Manual review of screenshots required; no per-Glyph assertion");
+                report.put("nextRound", next);
+                observeAutoHideCycle(nextOutput, next);
+                report.put("nextRoundShownAndHiddenWithoutRestartOrConsent", true);
+                showFromNotification(output, "completed-round-notification", report);
+                awaitNode("glyphDiagram", 5_000);
+                long restoredAt = SystemClock.elapsedRealtime();
+                while (SystemClock.elapsedRealtime() - restoredAt < 2_000) {
+                    assertHeaderlessPanel();
+                    assertNoProjectionConsent();
+                    SystemClock.sleep(100);
+                }
+                saveScreenshot(new File(output, "restored-completed-round.png"));
+                report.put("manualShowAfterCompletionObservedMillis", SystemClock.elapsedRealtime() - restoredAt);
+            }
+            if (hiddenJourney) {
                 click(awaitNode("closeOverlay", 5_000));
-                JSONObject standby = new JSONObject();
-                report.put("afterResultClose", standby);
-                observeStandby(output, "after-result-close", standby);
+                JSONObject hidden = new JSONObject();
+                report.put("firstRoundDismissed", hidden);
+                observeHidden(output, "first-round-dismissed", hidden);
+                playFixture(playbackSource);
+                File nextOutput = new File(output, "next-round");
+                assertTrue("Cannot create next-round evidence directory", nextOutput.mkdirs());
+                JSONObject next = new JSONObject();
+                next.put("screenshotDirectory", "next-round");
+                next.put("glyphVerification", "Manual review of screenshots required; no per-Glyph assertion");
+                report.put("nextRound", next);
+                observePhases(nextOutput, next, true);
+                report.put("nextRoundRevealedWithoutRestartOrConsent", true);
+                click(awaitNode("closeOverlay", 5_000));
+                JSONObject nextHidden = new JSONObject();
+                report.put("secondRoundDismissed", nextHidden);
+                observeHidden(output, "second-round-dismissed", nextHidden);
+                showFromNotification(output, "live-notification", report);
+                awaitRecognitionPanel();
+                saveScreenshot(new File(output, "restored-live-result.png"));
             }
             stopSharing();
             assertTrue("Full stop must remove both floating controls",
-                    findAppNode("dragHandle") == null && findAppNode("startRecognitionIcon") == null);
+                    findAppNode("glyphDiagram") == null && findAppNode("startRecognitionIcon") == null);
             report.put("fullStopVerified", true);
-            report.put("status", "ui_phase_checks_passed_manual_glyph_review_required");
+            report.put("status", "ui_checks_passed_manual_screenshot_review_required");
         } catch (Throwable failure) {
             report.put("status", "failed");
             report.put("failureClass", failure.getClass().getName());
@@ -198,14 +242,14 @@ public final class ReleaseUiCaptureInstrumentedTest {
                     }
                     if (previousPowerSaving != null) {
                         launchHome();
-                        if (previousAutoStop != null) selectAutoStop(false);
+                        if (previousAutoHide != null) selectAutoHide(false);
                         selectMode(false);
                     }
                     if (previousFloatingWindow != null) {
                         AccessibilityNodeInfo floatingSwitch = awaitNode("floatingWindowSwitch", 5_000);
                         if (floatingSwitch.isChecked() != previousFloatingWindow) click(floatingSwitch);
                     }
-                    if (previousAutoStop != null) selectAutoStop(previousAutoStop);
+                    if (previousAutoHide != null) selectAutoHide(previousAutoHide);
                     if (previousPowerSaving != null) selectMode(previousPowerSaving);
                 } finally {
                     serviceInfo.flags = previousFlags;
@@ -228,10 +272,10 @@ public final class ReleaseUiCaptureInstrumentedTest {
         awaitCheckedState(id, true);
     }
 
-    private void selectAutoStop(boolean autoStop) {
-        AccessibilityNodeInfo control = awaitNode("autoStopSwitch", 5_000);
-        if (control.isChecked() != autoStop) click(control);
-        awaitCheckedState("autoStopSwitch", autoStop);
+    private void selectAutoHide(boolean autoHide) {
+        AccessibilityNodeInfo control = awaitNode("autoHideSwitch", 5_000);
+        if (control.isChecked() != autoHide) click(control);
+        awaitCheckedState("autoHideSwitch", autoHide);
     }
 
     private void awaitCheckedState(String id, boolean expected) {
@@ -245,31 +289,19 @@ public final class ReleaseUiCaptureInstrumentedTest {
     }
 
     private void awaitRecognitionPanel() {
-        long deadline = SystemClock.elapsedRealtime() + 10_000;
-        while (SystemClock.elapsedRealtime() < deadline) {
-            assertNoProjectionConsent();
-            if (findAppNode("dragHandle") != null && findAppNode("restartRecognitionButton") == null
-                    && findAppNode("startRecognitionIcon") == null) return;
-            SystemClock.sleep(100);
-        }
-        throw new AssertionError("Restart did not replace the retained result with active recognition");
+        awaitNode("glyphDiagram", 10_000);
+        awaitNode("dragHandle", 5_000);
+        assertTrue("An active panel must not retain the standby icon", findAppNode("startRecognitionIcon") == null);
+        assertNoProjectionConsent();
     }
 
-    private void observeRestartBeforeReplay(File output, JSONObject report) throws Exception {
-        long started = SystemClock.elapsedRealtime();
-        while (SystemClock.elapsedRealtime() - started < 2_000) {
-            assertNoProjectionConsent();
-            AccessibilityNodeInfo status = findAppNode("dragHandle");
-            assertTrue("Restart must keep recognizing the old input until a new round starts",
-                    status != null && !appString("overlay_result_ready").equals(text(status)));
-            assertTrue("The old input must not immediately recreate the previous result",
-                    findAppNode("restartRecognitionButton") == null && findAppNode("startRecognitionIcon") == null);
-            SystemClock.sleep(100);
-        }
-        saveScreenshot(new File(output, "restart-before-replay.png"));
-        report.put("observedMillis", SystemClock.elapsedRealtime() - started);
-        report.put("oldInputDidNotRestoreResult", true);
-        report.put("screenshot", "restart-before-replay.png");
+    private void assertHeaderlessPanel() {
+        AccessibilityNodeInfo diagram = findAppNode("glyphDiagram");
+        assertTrue("Automatic hiding must retain the Glyph canvas until the drawing finishes",
+                diagram != null && diagram.isVisibleToUser());
+        assertTrue("Automatic hiding must remove the entire top control row",
+                findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null);
+        assertTrue("An active automatic session must not show a standby icon", findAppNode("startRecognitionIcon") == null);
     }
 
     private void stopSharing() {
@@ -287,19 +319,144 @@ public final class ReleaseUiCaptureInstrumentedTest {
             AccessibilityNodeInfo icon = findAppNode("startRecognitionIcon");
             assertTrue("The standby icon must remain visible while the movie plays", icon != null && icon.isVisibleToUser());
             assertTrue("Standby must not display the recognition panel",
-                    findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null
-                            && findAppNode("restartRecognitionButton") == null);
+                    findAppNode("glyphDiagram") == null && findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null);
             SystemClock.sleep(100);
         }
         assertNotNull("The standby icon must remain available", findAppNode("startRecognitionIcon"));
         assertTrue("Standby must keep the recognition panel closed",
-                findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null
-                        && findAppNode("restartRecognitionButton") == null);
+                findAppNode("glyphDiagram") == null && findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null);
         saveScreenshot(new File(output, name + ".png"));
         report.put("observedMillis", SystemClock.elapsedRealtime() - started);
         report.put("standbyIconVisible", true);
         report.put("recognitionPanelAbsent", true);
         report.put("screenshot", name + ".png");
+    }
+
+    private void observeHidden(File output, String name, JSONObject report) throws Exception {
+        awaitNoFloatingSurface();
+        long started = SystemClock.elapsedRealtime();
+        while (SystemClock.elapsedRealtime() - started < 3_000) {
+            assertNoProjectionConsent();
+            assertTrue("A dismissed realtime window must remain completely hidden in the same round",
+                    findAppNode("glyphDiagram") == null && findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null
+                            && findAppNode("startRecognitionIcon") == null);
+            SystemClock.sleep(100);
+        }
+        saveScreenshot(new File(output, name + ".png"));
+        report.put("observedMillis", SystemClock.elapsedRealtime() - started);
+        report.put("recognitionPanelAbsent", true);
+        report.put("standbyIconAbsent", true);
+        report.put("screenshot", name + ".png");
+    }
+
+    private void awaitNoFloatingSurface() {
+        long deadline = SystemClock.elapsedRealtime() + 5_000;
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (findAppNode("glyphDiagram") == null && findAppNode("dragHandle") == null
+                    && findAppNode("closeOverlay") == null && findAppNode("startRecognitionIcon") == null) return;
+            SystemClock.sleep(50);
+        }
+        throw new AssertionError("The floating panel and standby icon did not disappear");
+    }
+
+    private void showFromNotification(File output, String name, JSONObject report) throws Exception {
+        runShellCommand("cmd statusbar expand-notifications");
+        String actionText = appString("notification_show_overlay");
+        long deadline = SystemClock.elapsedRealtime() + 10_000;
+        boolean expanded = false;
+        try {
+            while (SystemClock.elapsedRealtime() < deadline) {
+                AccessibilityNodeInfo action = findSystemNode(node -> actionText.equalsIgnoreCase(text(node))
+                        && node.isVisibleToUser());
+                if (action != null) {
+                    saveScreenshot(new File(output, name + ".png"));
+                    click(action);
+                    report.put(name, new JSONObject().put("clickedActionText", actionText)
+                            .put("actualNotificationClick", true).put("screenshot", name + ".png"));
+                    return;
+                }
+                if (!expanded) {
+                    AccessibilityNodeInfo title = findSystemNode(node -> appString("notification_title").equals(text(node)));
+                    for (AccessibilityNodeInfo card = title; card != null; card = card.getParent()) {
+                        AccessibilityNodeInfo expand = findNode(card, node ->
+                                "android:id/expand_button".equals(node.getViewIdResourceName()));
+                        if (expand != null) {
+                            click(expand);
+                            expanded = true;
+                            break;
+                        }
+                    }
+                }
+                SystemClock.sleep(100);
+            }
+            throw new AssertionError("The notification's Show floating window action was not available");
+        } catch (Exception | AssertionError failure) {
+            String screenshotName = name + "-failure.png";
+            String treeName = name + "-failure-ui.json";
+            try {
+                saveScreenshot(new File(output, screenshotName));
+                report.put(name + "FailureScreenshot", screenshotName);
+            } catch (Exception | AssertionError evidenceFailure) {
+                failure.addSuppressed(evidenceFailure);
+            }
+            try {
+                JSONArray windows = new JSONArray();
+                for (AccessibilityWindowInfo window : automation.getWindows()) {
+                    Rect bounds = new Rect();
+                    window.getBoundsInScreen(bounds);
+                    JSONObject entry = new JSONObject().put("id", window.getId()).put("type", window.getType())
+                            .put("layer", window.getLayer()).put("title", String.valueOf(window.getTitle()))
+                            .put("active", window.isActive()).put("focused", window.isFocused())
+                            .put("bounds", bounds.toShortString());
+                    AccessibilityNodeInfo root = window.getRoot();
+                    if (root != null) entry.put("root", accessibilityTree(root));
+                    windows.put(entry);
+                }
+                JSONObject evidence = new JSONObject().put("actionText", actionText)
+                        .put("notificationTitle", appString("notification_title"))
+                        .put("expanded", expanded).put("windows", windows);
+                try (OutputStreamWriter writer = new OutputStreamWriter(
+                        new FileOutputStream(new File(output, treeName)), StandardCharsets.UTF_8)) {
+                    writer.write(evidence.toString(2));
+                }
+                report.put(name + "FailureUiTree", treeName);
+            } catch (Exception | AssertionError evidenceFailure) {
+                failure.addSuppressed(evidenceFailure);
+            }
+            throw failure;
+        } finally {
+            runShellCommand("cmd statusbar collapse");
+        }
+    }
+
+    private JSONObject accessibilityTree(AccessibilityNodeInfo node) throws Exception {
+        Rect bounds = new Rect();
+        node.getBoundsInScreen(bounds);
+        JSONObject tree = new JSONObject().put("package", String.valueOf(node.getPackageName()))
+                .put("resourceId", String.valueOf(node.getViewIdResourceName()))
+                .put("class", String.valueOf(node.getClassName())).put("text", text(node))
+                .put("contentDescription", String.valueOf(node.getContentDescription()))
+                .put("visible", node.isVisibleToUser()).put("clickable", node.isClickable())
+                .put("enabled", node.isEnabled()).put("bounds", bounds.toShortString());
+        JSONArray children = new JSONArray();
+        for (int index = 0; index < node.getChildCount(); index++) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (child != null) children.put(accessibilityTree(child));
+        }
+        return tree.put("children", children);
+    }
+
+    private AccessibilityNodeInfo findSystemNode(Predicate<AccessibilityNodeInfo> matches) {
+        return findInWindows(node -> "com.android.systemui".equals(String.valueOf(node.getPackageName()))
+                && matches.test(node));
+    }
+
+    private void runShellCommand(String command) throws Exception {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                new ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)),
+                StandardCharsets.UTF_8))) {
+            while (reader.readLine() != null) { }
+        }
     }
 
     private File fixtureForPlayer(File source) throws Exception {
@@ -317,43 +474,42 @@ public final class ReleaseUiCaptureInstrumentedTest {
         return playbackSource;
     }
 
-    private void observePhases(File output, JSONObject report, boolean autoStop) throws Exception {
+    private void observePhases(File output, JSONObject report, boolean expectsAutomaticReveal) throws Exception {
         JSONArray stages = new JSONArray();
         JSONArray screenshots = new JSONArray();
         report.put("stages", stages);
         report.put("screenshots", screenshots);
         long startedAt = SystemClock.elapsedRealtime();
         long nextScreenshotAt = startedAt;
-        long firstTerminalAt = -1;
+        long firstInputAt = -1;
         String previousStatus = null;
         boolean sawPresenting = false;
-        String terminalStatus = autoStop ? appString("overlay_result_ready") : YOUR_TURN;
-        report.put("terminalPhase", autoStop ? "retainedResult" : "liveInput");
-        while (SystemClock.elapsedRealtime() - startedAt < 40_000) {
+        report.put("terminalPhase", "liveInput");
+        while (SystemClock.elapsedRealtime() - startedAt < 30_000) {
             assertNoProjectionConsent();
             long now = SystemClock.elapsedRealtime();
             AccessibilityNodeInfo statusNode = findAppNode("dragHandle");
             String status = statusNode == null ? null : text(statusNode);
             if (status != null && !status.equals(previousStatus)) {
+                if (expectsAutomaticReveal && previousStatus == null) {
+                    assertTrue("The hidden window must first reappear during sequence presentation",
+                            status.startsWith("Watching the sequence"));
+                    assertTrue("Automatic reveal must not create a standby icon",
+                            findAppNode("startRecognitionIcon") == null);
+                    report.put("automaticRevealElapsedMillis", now - startedAt);
+                    saveScreenshot(new File(output, "automatic-reveal.png"));
+                }
                 stages.put(new JSONObject().put("elapsedMillis", now - startedAt).put("text", status));
                 previousStatus = status;
             }
             if (status != null && status.startsWith("Watching the sequence")) sawPresenting = true;
-            if (terminalStatus.equals(status) && firstTerminalAt < 0) {
-                assertTrue("The first result or input must follow a visible sequence phase", sawPresenting);
-                firstTerminalAt = now;
-                report.put(autoStop ? "firstResultElapsedMillis" : "firstInputElapsedMillis", now - startedAt);
+            if (YOUR_TURN.equals(status) && firstInputAt < 0) {
+                assertTrue("Input must follow a visible sequence phase", sawPresenting);
+                firstInputAt = now;
+                report.put("firstInputElapsedMillis", now - startedAt);
             }
-            if (firstTerminalAt >= 0) {
-                assertEquals("The result or input must remain visible for three seconds", terminalStatus, status);
-                if (autoStop) {
-                    AccessibilityNodeInfo restart = findAppNode("restartRecognitionButton");
-                    assertTrue("A retained result must keep its restart button visible",
-                            restart != null && restart.isVisibleToUser() && restart.isEnabled());
-                    assertEquals(appString("overlay_start_recognition"), text(restart));
-                    assertTrue("A retained result must remain open instead of returning to the icon",
-                            findAppNode("startRecognitionIcon") == null && findAppNode("closeOverlay") != null);
-                }
+            if (firstInputAt >= 0) {
+                assertEquals("The input sequence must remain visible for three seconds", YOUR_TURN, status);
             }
             if (now >= nextScreenshotAt) {
                 String name = String.format(java.util.Locale.ROOT, "frame-%05d.png", screenshots.length());
@@ -362,19 +518,71 @@ public final class ReleaseUiCaptureInstrumentedTest {
                         .put("overlayStatus", status == null ? JSONObject.NULL : status));
                 nextScreenshotAt = now + 500;
             }
-            if (firstTerminalAt >= 0 && now - firstTerminalAt >= 3_000) {
-                String terminalScreenshot = autoStop ? "result-after-three-seconds.png" : "input-after-three-seconds.png";
-                saveScreenshot(new File(output, terminalScreenshot));
-                report.put("terminalScreenshot", terminalScreenshot);
-                report.put(autoStop ? "resultObservedMillis" : "inputPhaseObservedMillis", now - firstTerminalAt);
-                if (autoStop) report.put("resultRestartControlVisible", true);
+            if (firstInputAt >= 0 && now - firstInputAt >= 3_000) {
+                saveScreenshot(new File(output, "input-after-three-seconds.png"));
+                report.put("terminalScreenshot", "input-after-three-seconds.png");
+                report.put("inputPhaseObservedMillis", now - firstInputAt);
                 report.put("elapsedMillis", now - startedAt);
                 return;
             }
             SystemClock.sleep(100);
         }
-        throw new AssertionError("No complete presentation-to-" + (autoStop ? "result" : "input")
-                + " UI journey within 40 seconds; last=" + previousStatus);
+        throw new AssertionError("No complete presentation-to-input UI journey in the first playback; last=" + previousStatus);
+    }
+
+    private void observeAutoHideCycle(File output, JSONObject report) throws Exception {
+        JSONArray screenshots = new JSONArray();
+        report.put("screenshots", screenshots);
+        report.put("completionVerification", "UI visibility timing and screenshots; game completion requires manual screenshot review");
+        long startedAt = SystemClock.elapsedRealtime();
+        long nextScreenshotAt = startedAt;
+        long firstVisibleAt = -1;
+        boolean savedInputScreenshot = false;
+        // This fixed movie enters input around 14s, draws through 21s, and loops after 33s.
+        while (SystemClock.elapsedRealtime() - startedAt < 30_000) {
+            assertNoProjectionConsent();
+            long now = SystemClock.elapsedRealtime();
+            long elapsed = now - startedAt;
+            AccessibilityNodeInfo diagram = findAppNode("glyphDiagram");
+            boolean visible = diagram != null && diagram.isVisibleToUser();
+            assertTrue("Automatic hiding must remove the title and X control row",
+                    findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null);
+            assertTrue("Automatic recognition must not leave a floating icon", findAppNode("startRecognitionIcon") == null);
+            if (visible) {
+                if (firstVisibleAt < 0) {
+                    firstVisibleAt = now;
+                    assertTrue("The prediction canvas must appear before the input observation window", elapsed < 16_000);
+                    report.put("automaticRevealElapsedMillis", elapsed);
+                    saveScreenshot(new File(output, "automatic-reveal.png"));
+                }
+                if (!savedInputScreenshot && elapsed >= 17_000) {
+                    saveScreenshot(new File(output, "during-drawing.png"));
+                    report.put("duringDrawingScreenshotElapsedMillis", elapsed);
+                    savedInputScreenshot = true;
+                }
+            } else if (firstVisibleAt >= 0) {
+                assertTrue("The canvas must not disappear at input entry or while the fixture is still drawing",
+                        elapsed >= 20_000 && savedInputScreenshot);
+                report.put("automaticHideElapsedMillis", elapsed);
+                report.put("visibleDurationMillis", now - firstVisibleAt);
+                saveScreenshot(new File(output, "automatic-hidden.png"));
+                JSONObject hidden = new JSONObject();
+                report.put("afterAutomaticHide", hidden);
+                observeHidden(output, "after-automatic-hide", hidden);
+                report.put("completedWithinFirstPlayback", true);
+                report.put("elapsedMillis", SystemClock.elapsedRealtime() - startedAt);
+                return;
+            }
+            if (now >= nextScreenshotAt) {
+                String name = String.format(java.util.Locale.ROOT, "frame-%05d.png", screenshots.length());
+                saveScreenshot(new File(output, name));
+                screenshots.put(new JSONObject().put("file", name).put("elapsedMillis", elapsed)
+                        .put("glyphCanvasVisible", visible));
+                nextScreenshotAt = now + 500;
+            }
+            SystemClock.sleep(100);
+        }
+        throw new AssertionError("No prediction canvas followed by automatic hiding within the first 30 seconds");
     }
 
     private void launchHome() {
@@ -402,7 +610,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
         long deadline = SystemClock.elapsedRealtime() + timeoutMillis;
         while (SystemClock.elapsedRealtime() < deadline) {
             AccessibilityNodeInfo node = findAppNode(id);
-            if (node != null && node.isEnabled()) return node;
+            if (node != null && node.isEnabled() && node.isVisibleToUser()) return node;
             SystemClock.sleep(100);
         }
         throw new AssertionError("UI control not available: " + id);
@@ -428,10 +636,10 @@ public final class ReleaseUiCaptureInstrumentedTest {
         while (SystemClock.elapsedRealtime() < deadline) {
             AccessibilityNodeInfo root = automation.getRootInActiveWindow();
             if (root != null) {
-                AccessibilityNodeInfo denial = findNode(root, node -> node.getViewIdResourceName() != null
-                        && node.getViewIdResourceName().endsWith(":id/permission_deny_button"));
-                if (denial != null) {
-                    click(denial);
+                AccessibilityNodeInfo allowNotifications = findNode(root, node -> node.getViewIdResourceName() != null
+                        && node.getViewIdResourceName().endsWith(":id/permission_allow_button"));
+                if (allowNotifications != null) {
+                    click(allowNotifications);
                 } else {
                     AccessibilityNodeInfo wholeScreen = findNode(root, node -> Arrays.asList(
                             "共享整个屏幕", "整个屏幕", "Entire screen", "Share entire screen").contains(text(node)));

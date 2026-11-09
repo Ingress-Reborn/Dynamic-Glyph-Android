@@ -55,7 +55,7 @@ class MainActivityInstrumentedTest {
         assertEquals(tables.sequenceStatus, home.findViewById<TextView>(R.id.sequenceTableStatus).text)
         assertEquals(context.getString(R.string.home_live_glyph_title), home.findViewById<TextView>(R.id.homeLiveTitle).text)
         assertTrue(home.findViewById<RadioButton>(R.id.realtimeModeButton).isChecked)
-        assertFalse(home.findViewById<Switch>(R.id.autoStopSwitch).isChecked)
+        assertFalse(home.findViewById<Switch>(R.id.autoHideSwitch).isChecked)
     }
 
     @Test
@@ -87,14 +87,14 @@ class MainActivityInstrumentedTest {
     }
 
     @Test
-    fun automaticRoundStopPersistsAndKeepsTheResultWindowAvailable() {
+    fun automaticHidingPersistsAndKeepsTheFloatingWindowAvailable() {
         val preferences = AppPreferences(context).apply { showsFloatingWindow = false }
         val intent = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val home = (instrumentation.startActivitySync(intent) as MainActivity).also { activity = it }
         instrumentation.waitForIdleSync()
 
-        instrumentation.runOnMainSync { home.findViewById<Switch>(R.id.autoStopSwitch).performClick() }
-        assertTrue(AppPreferences(context).stopsAfterRound)
+        instrumentation.runOnMainSync { home.findViewById<Switch>(R.id.autoHideSwitch).performClick() }
+        assertTrue(AppPreferences(context).hidesAfterDrawing)
         assertEquals(RecognitionMode.REALTIME, preferences.recognitionMode)
         assertTrue(preferences.showsFloatingWindow)
         assertTrue(home.findViewById<Switch>(R.id.floatingWindowSwitch).isChecked)
@@ -104,11 +104,11 @@ class MainActivityInstrumentedTest {
         instrumentation.runOnMainSync { home.finish() }
         val reopened = (instrumentation.startActivitySync(intent) as MainActivity).also { activity = it }
         instrumentation.waitForIdleSync()
-        assertTrue(reopened.findViewById<Switch>(R.id.autoStopSwitch).isChecked)
+        assertTrue(reopened.findViewById<Switch>(R.id.autoHideSwitch).isChecked)
         assertFalse(reopened.findViewById<Switch>(R.id.floatingWindowSwitch).isEnabled)
 
-        instrumentation.runOnMainSync { reopened.findViewById<Switch>(R.id.autoStopSwitch).performClick() }
-        assertFalse(AppPreferences(context).stopsAfterRound)
+        instrumentation.runOnMainSync { reopened.findViewById<Switch>(R.id.autoHideSwitch).performClick() }
+        assertFalse(AppPreferences(context).hidesAfterDrawing)
         assertTrue(reopened.findViewById<Switch>(R.id.floatingWindowSwitch).isEnabled)
         assertTrue(preferences.showsFloatingWindow)
     }

@@ -15,9 +15,9 @@ class AppPreferences(context: Context) {
         }
         set(value) = values.edit().putString(RECOGNITION_MODE_KEY, value.rawValue).apply()
 
-    var stopsAfterRound: Boolean
-        get() = values.getBoolean(AUTO_STOP_KEY, false)
-        set(value) = values.edit().putBoolean(AUTO_STOP_KEY, value).apply()
+    var hidesAfterDrawing: Boolean
+        get() = values.getBoolean(AUTO_HIDE_KEY, false)
+        set(value) = values.edit().putBoolean(AUTO_HIDE_KEY, value).apply()
 
     var showsFloatingWindow: Boolean
         get() = values.getBoolean("display.floatingWindow", true)
@@ -62,7 +62,7 @@ class AppPreferences(context: Context) {
     companion object {
         const val PREFERENCES_NAME = "glyph-lens"
         const val RECOGNITION_MODE_KEY = "capture.recognitionMode"
-        const val AUTO_STOP_KEY = "capture.stopsAfterRound"
+        const val AUTO_HIDE_KEY = "display.hidesAfterDrawing"
         const val MODE_COLORS_KEY = "diagnostics.floatingWindowModeColors"
         const val CANVAS_WIDTH_KEY = "pip.canvas.width"
         const val CANVAS_HEIGHT_KEY = "pip.canvas.height"

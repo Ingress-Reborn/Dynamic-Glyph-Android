@@ -162,13 +162,14 @@ class GameUILayoutLocator {
         val minimum = contentWidth * 0.085
         val maximum = contentWidth * 0.190
         fun colored(index: Int): Boolean {
-            val (red, green, blue) = image[index % image.width, index / image.width]
+            val (red, green, blue) = image[index]
             return SlotStripReader.isGold(red, green, blue) || SlotStripReader.isViolet(red, green, blue)
         }
         for (start in visited.indices) {
-            if (visited[start] || !colored(start)) continue
-            stack.addLast(start)
+            if (visited[start]) continue
             visited[start] = true
+            if (!colored(start)) continue
+            stack.addLast(start)
             var left = image.width
             var right = 0
             var top = bottom
@@ -184,10 +185,9 @@ class GameUILayoutLocator {
                 for (ny in max(0, y - 1)..min(bottom - 1, y + 1)) {
                     for (nx in max(0, x - 1)..min(image.width - 1, x + 1)) {
                         val next = ny * image.width + nx
-                        if (!visited[next] && colored(next)) {
-                            visited[next] = true
-                            stack.addLast(next)
-                        }
+                        if (visited[next]) continue
+                        visited[next] = true
+                        if (colored(next)) stack.addLast(next)
                     }
                 }
             }
