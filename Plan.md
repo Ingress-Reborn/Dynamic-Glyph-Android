@@ -57,7 +57,7 @@ CSV、系统图像缓冲区和文件读取在各自入口解析与校验，内�
 - [x] 最终增量构建通过（22 秒），正式 APK 413,693 字节，源码 `e09da98`。
 - [x] 五张重点截图人工核对通过：首次、恢复、重新校准三次 IDEA 实线图形与 CSV 路径 `429753186` 一致，无多余预测；已保存和重置后的状态及按钮正确。
 - [x] origin/main 已推送 `e09da98`，v0.4.5 标签指向该提交，Latest Release 和 413,693 字节 APK 已发布。
-- [ ] 将最终文档按既有安排同步 szres/main，保留目标历史。
+- [x] 源码与最终验收文档已同步 origin/main 和 szres/main，保留目标历史，未强制推送。
 
 交付入口：[v0.4.5 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.5) · [正式 APK](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.5/Glyph-Lens-0.4.5-arm64.apk)。实际记录集中在 [DEVICE_CALIBRATION.md](Docs/DEVICE_CALIBRATION.md)。原始录屏和本地构建证据继续置于被忽略的构建目录，不提交用户素材；不下载发布包验 SHA。
 

@@ -33,13 +33,13 @@
 | 签名 Release | 一项正式校准流程通过：首次校准、结束后重新启动复用、设置重置与重新校准；恢复的保存值完全一致，运行中重置无需新的共享授权，清理后屏幕共享为空 |
 | 增量构建 | 最终源码 `e09da98` 构建成功，22 秒；0.4.5 / versionCode 9 签名 APK 413,693 字节，约 0.414 MB |
 | 重点截图 | 五张人工核对通过：首次、恢复、重新校准的三次实线 IDEA 均与 CSV 路径 `429753186` 一致，无多余预测；保存和重置状态及按钮正确 |
-| 发布 | origin/main 已推送 `e09da98`，v0.4.5 标签指向该提交，Latest Release 和 413,693 字节 APK 发布成功；szres/main 按既有安排同步最终文档 |
+| 发布 | v0.4.5 标签指向生产源码 `e09da98`，Latest Release 和 413,693 字节 APK 发布成功；源码与最终验收文档已同步 origin/main 和 szres/main |
 
 早期正式流程暴露的地图误检与恢复校准后的黑边失败均已针对原因修复，最终重跑通过；失败运行不算通过，重复运行也不增加唯一用例数量。原始588宽及603宽冷启动回放在 `8bd1f95` 执行；其后最终 `e09da98` 的变更集中于槽位触发，另行覆盖了先前失败的黑边复用场景及五图回放。
 
-本地证据位于忽略目录 `build/device-calibration/`，包括最终 `letterbox-build.log` 和 `accepted-release/report.json`。用户录屏及截图不随源码分发。不沿用 0.4.4 的构建、包大小或通过数量。
+本地证据位于忽略目录 `build/device-calibration/`，包括最终 `letterbox-build.log` 和 `accepted-release/report.json`。完整用户录屏和界面截图不随源码分发；测试资源仅增加不含个人信息的游戏标题裁剪图。不沿用 0.4.4 的构建、包大小或通过数量。
 
-交付入口：[v0.4.5 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.5) · [Glyph-Lens-0.4.5-arm64.apk](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.5/Glyph-Lens-0.4.5-arm64.apk)。最终文档按既有方式同步 szres/main，保留目标历史，不 force push。
+交付入口：[v0.4.5 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.5) · [Glyph-Lens-0.4.5-arm64.apk](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.5/Glyph-Lens-0.4.5-arm64.apk)。源码和最终文档已同步 szres/main，保留目标历史，未 force push。
 
 继续使用现有纯特征识别和自适应节流，不新增 OCR、模型、运行库或测试工具。不跑全仓库、不重复 CPU 对比、不下载发布包验 SHA。
 

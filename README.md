@@ -25,7 +25,7 @@ Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android �
 
 交付目标仍是 Android 10 / API 29 以上的 arm64、竖屏整屏共享；不要求 root、无障碍服务或麦克风。校准依据当前画面，不为每个品牌或机型添加参数；本轮不声称已实测所有 Android 设备、横屏、分屏或单应用共享。
 
-交付入口：[v0.4.5 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.5) · [Glyph-Lens-0.4.5-arm64.apk](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.5/Glyph-Lens-0.4.5-arm64.apk)。origin/main 已推送生产源码 `e09da98`，v0.4.5 标签指向该提交，Latest Release 和 APK 已发布。最终文档按既有安排同步 [szres/main](https://github.com/szres/dynamic-glyph-android)，保留目标历史。完整验收记录见 [DEVICE_CALIBRATION.md](Docs/DEVICE_CALIBRATION.md)。
+交付入口：[v0.4.5 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.5) · [Glyph-Lens-0.4.5-arm64.apk](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.5/Glyph-Lens-0.4.5-arm64.apk)。v0.4.5 标签指向生产源码 `e09da98`，Latest Release 和 APK 已发布。源码和最终验收文档已同步 origin/main 与 [szres/main](https://github.com/szres/dynamic-glyph-android)，保留目标历史。完整验收记录见 [DEVICE_CALIBRATION.md](Docs/DEVICE_CALIBRATION.md)。
 
 ## 历史与工程资料
 
