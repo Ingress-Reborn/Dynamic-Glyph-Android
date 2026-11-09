@@ -4,18 +4,24 @@ import android.content.Context
 import android.content.Intent
 import android.widget.Button
 import android.widget.Switch
+import android.widget.TextView
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.szres.glyphlens.R
 import org.szres.glyphlens.capture.CaptureService
+import org.szres.glyphlens.recognition.GlyphPoint
+import org.szres.glyphlens.recognition.NodeIndex
+import org.szres.glyphlens.recognition.image.DeviceCalibration
+import org.szres.glyphlens.recognition.image.NodeArrayDetection
 import org.szres.glyphlens.settings.AppPreferences
 import org.szres.glyphlens.settings.OverlayCanvasConfiguration
 
@@ -82,6 +88,44 @@ class SettingsActivityInstrumentedTest {
 
         assertTrue(AppPreferences(context).colorsFloatingWindowByMode)
         assertTrue(AppPreferences(context).protectsFloatingWindowFromCapture)
+    }
+
+    @Test
+    fun savedCalibrationCanBeResetWithoutChangingWindowSettings() {
+        val calibration = DeviceCalibration.fromDetection(
+            NodeArrayDetection(
+                imageWidth = 360, imageHeight = 800,
+                origin = GlyphPoint(45.0, 350.0), size = GlyphPoint(270.0, 312.0),
+                nodeRadius = 6.0, matchedNodes = NodeIndex.all.toSet(), rootMeanSquareError = 0.0,
+            ),
+        )
+        AppPreferences(context).apply {
+            deviceCalibration = calibration
+            hidesAfterDrawing = false
+            showsFloatingWindow = false
+            overlayCanvas = OverlayCanvasConfiguration(512, 128, 3)
+        }
+        val settings = launch()
+        assertEquals(calibration, AppPreferences(context).deviceCalibration)
+        assertEquals(
+            context.getString(R.string.settings_calibration_saved),
+            settings.findViewById<TextView>(R.id.settingsCalibrationStatus).text.toString(),
+        )
+        instrumentation.runOnMainSync {
+            settings.findViewById<Button>(R.id.settingsResetCalibrationButton).performClick()
+            settings.finish()
+        }
+        val reopened = launch()
+
+        assertNull(AppPreferences(context).deviceCalibration)
+        assertEquals(
+            context.getString(R.string.settings_calibration_pending),
+            reopened.findViewById<TextView>(R.id.settingsCalibrationStatus).text.toString(),
+        )
+        assertFalse(reopened.findViewById<Button>(R.id.settingsResetCalibrationButton).isEnabled)
+        assertFalse(AppPreferences(context).hidesAfterDrawing)
+        assertFalse(AppPreferences(context).showsFloatingWindow)
+        assertEquals(OverlayCanvasConfiguration(512, 128, 3), AppPreferences(context).overlayCanvas)
     }
 
     private fun launch(): SettingsActivity {

@@ -42,7 +42,16 @@ class SettingsActivity : ComponentActivity() {
         renderCanvas()
     }
 
+    override fun onResume() {
+        super.onResume()
+        renderCalibration()
+    }
+
     private fun connectActions() {
+        findViewById<Button>(R.id.settingsResetCalibrationButton).setOnClickListener {
+            preferences.resetDeviceCalibration()
+            renderCalibration()
+        }
         floatingSwitch.apply {
             isChecked = preferences.showsFloatingWindow
             setOnCheckedChangeListener { _, checked ->
@@ -83,6 +92,14 @@ class SettingsActivity : ComponentActivity() {
             preferences.overlayCanvas = draftCanvas
             renderCanvas()
         }
+    }
+
+    private fun renderCalibration() {
+        val hasCalibration = preferences.deviceCalibration != null
+        findViewById<TextView>(R.id.settingsCalibrationStatus).setText(
+            if (hasCalibration) R.string.settings_calibration_saved else R.string.settings_calibration_pending,
+        )
+        findViewById<Button>(R.id.settingsResetCalibrationButton).isEnabled = hasCalibration
     }
 
     private fun installCanvasSeek(seek: SeekBar, update: (Int) -> Unit) {

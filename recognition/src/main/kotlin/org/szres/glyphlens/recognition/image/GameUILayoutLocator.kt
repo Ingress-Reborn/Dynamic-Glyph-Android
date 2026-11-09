@@ -48,12 +48,16 @@ class GameUILayoutLocator {
         height = image.height
         if (calibration != null) anchor = calibration
         val band = FrameTopBand(image, image.height)
+        val previouslyEmpty = lastSlotResult.exceptionOrNull() == SlotStripRejection.NoMarkers
         lastSlotResult = slotReader.read(band)
         val reading = lastSlotResult.getOrNull()
+        // A newly appearing hexagon can be clipped by the provisional band. Waiting for
+        // the next periodic search can lose its brief blank prelude before the first Glyph.
+        val markersAppeared = previouslyEmpty && lastSlotResult.exceptionOrNull() != SlotStripRejection.NoMarkers
         val fullWidthArray = calibration != null && abs(calibration.size.x / 0.75 - width) <= width * 0.025
         if (reading != null && (located || fullWidthArray)) {
             located = true
-        } else if (calibration != null && sourceTime >= nextSearch) {
+        } else if (calibration != null && (sourceTime >= nextSearch || markersAppeared)) {
             nextSearch = sourceTime + 0.5
             locateStrip(image, calibration)?.let {
                 layout = it.layout

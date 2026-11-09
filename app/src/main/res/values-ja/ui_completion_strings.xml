@@ -4,4 +4,10 @@
     <string name="home_live_glyph_title">ライブ Glyph シーケンス</string>
     <string name="home_live_waiting">認識を開始すると、ここに現在の Glyph シーケンスが表示されます。</string>
     <string name="overlay_preview_accessibility">本番レンダラーで描画したフローティングウィンドウのプレビュー</string>
+    <string name="settings_calibration_title">端末の認識位置の調整</string>
+    <string name="settings_calibration_hint">初めて線のない Glyph グリッドが表示されたとき、11 個すべての点を使って自動調整します。次回以降は保存した調整結果を使用します。</string>
+    <string name="settings_calibration_saved">端末の調整結果を保存済み</string>
+    <string name="settings_calibration_pending">未調整：線のない Glyph グリッドを待っています</string>
+    <string name="settings_reset_calibration">認識位置の調整をリセット</string>
+    <string name="settings_calibration_reset_hint">リセットすると、次に線のない Glyph グリッドが表示されたときに再調整します。</string>
 </resources>

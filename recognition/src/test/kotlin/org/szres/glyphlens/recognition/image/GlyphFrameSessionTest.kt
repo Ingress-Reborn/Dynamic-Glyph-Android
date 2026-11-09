@@ -14,6 +14,76 @@ class GlyphFrameSessionTest {
     }
 
     @Test
+    fun savedDeviceGeometryRevalidatesLocallyInANewSessionAndAfterResolutionChanges() {
+        var saved: DeviceCalibration? = null
+        val first = GlyphFrameSession(pixelTestTable(), onCalibration = { saved = it })
+        first.observe(blank.image(), 0.0)
+        val loaded = requireNotNull(DeviceCalibration.decode(requireNotNull(saved).encode()))
+        val next = GlyphFrameSession(pixelTestTable(), initialCalibration = loaded)
+
+        assertNull(next.retainCalibration(blank.image(), 1.0))
+        assertNull(next.validatedAt)
+        assertEquals(GlyphFrameObservation.State.NO_STROKE, next.observe(blank.image(), 1.1)?.state)
+        assertNull(next.lastGridHuntNanoseconds)
+        assertEquals(listOf(id("clear")), next.observe(clear.image(), 1.2)?.exactMatches)
+
+        val larger = SyntheticRaster(scale = 2.0)
+        assertEquals(GlyphFrameObservation.State.NO_STROKE, next.observe(larger.image(), 1.3)?.state)
+        assertNull(next.lastGridHuntNanoseconds)
+        larger.line(larger.point(160.0, 130.0), larger.point(160.0, 418.0))
+        assertEquals(listOf(id("clear")), next.observe(larger.image(), 1.4)?.exactMatches)
+    }
+
+    @Test
+    fun savedCoordinatesCannotActivateCalibrationWithoutAnEmptyGrid() {
+        val saved = DeviceCalibration.fromDetection(requireNotNull(NodeArrayDetector().detect(blank.image())))
+        val session = GlyphFrameSession(pixelTestTable(), initialCalibration = saved)
+        assertNull(session.observe(clear.image(), 0.0))
+        assertNull(session.calibration)
+        assertNull(session.validatedAt)
+        assertNull(session.observe(LuminanceImage(blank.width, blank.height, ByteArray(blank.width * blank.height)), 0.1))
+        assertNull(session.calibration)
+        assertEquals(GlyphFrameObservation.State.NO_STROKE, session.observe(blank.image(), 0.2)?.state)
+        assertNull(session.lastGridHuntNanoseconds)
+    }
+
+    @Test
+    fun savedGeometryFallsBackForMovedGridAndResetDiscardsTheHint() {
+        val saved = DeviceCalibration.fromDetection(requireNotNull(NodeArrayDetector().detect(blank.image())))
+        val writes = mutableListOf<DeviceCalibration>()
+        val session = GlyphFrameSession(pixelTestTable(), saved, writes::add)
+        val moved = SyntheticRaster(offset = GlyphPoint(20.0, 24.0))
+        assertEquals(GlyphFrameObservation.State.NO_STROKE, session.observe(moved.image(), 0.0)?.state)
+        assertNotNull(session.lastGridHuntNanoseconds)
+        assertEquals(1, writes.size)
+        assertEquals(saved.origin.x + 20.0 / moved.width, writes.single().origin.x, 0.001)
+
+        session.observe(moved.image(), 0.5)
+        assertNull(session.lastGridHuntNanoseconds)
+        assertEquals(1, writes.size)
+        session.reset()
+        session.observe(moved.image(), 1.0)
+        assertNull(session.lastGridHuntNanoseconds)
+        assertEquals(1, writes.size)
+
+        session.resetCalibration()
+        assertNull(session.calibration)
+        assertNull(session.validatedAt)
+        session.observe(moved.image(), 1.1)
+        assertNotNull(session.lastGridHuntNanoseconds)
+        assertEquals(2, writes.size)
+    }
+
+    @Test
+    fun storedGeometryRejectsMalformedOrOutOfFrameValuesAtThePersistenceBoundary() {
+        for (stored in listOf(null, "", "0.1,0.2,0.3", "0.1,0.2,NaN,0.4,0.02", "0.2,0.3,0.9,0.5,0.02")) {
+            assertNull(DeviceCalibration.decode(stored))
+        }
+        val original = DeviceCalibration.fromDetection(requireNotNull(NodeArrayDetector().detect(blank.image())))
+        assertEquals(original, DeviceCalibration.decode(original.encode()))
+    }
+
+    @Test
     fun liveSessionAcquiresEmptyGeometryAndReusesItAcrossShapes() {
         val session = GlyphFrameSession(pixelTestTable())
         assertEquals(GlyphFrameObservation.State.NO_STROKE, session.observe(blank.image(), 1.0)?.state)

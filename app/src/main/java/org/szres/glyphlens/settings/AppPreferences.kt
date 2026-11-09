@@ -1,9 +1,18 @@
 package org.szres.glyphlens.settings
 
 import android.content.Context
+import org.szres.glyphlens.recognition.image.DeviceCalibration
 
 class AppPreferences(context: Context) {
     private val values = context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+
+    var deviceCalibration: DeviceCalibration?
+        get() = DeviceCalibration.decode(values.getString(CALIBRATION_KEY, null))
+        set(value) = values.edit().putString(CALIBRATION_KEY, value?.encode()).apply()
+
+    fun resetDeviceCalibration() {
+        values.edit().remove(CALIBRATION_KEY).apply()
+    }
 
     var hidesAfterDrawing: Boolean
         get() = values.getBoolean(AUTO_HIDE_KEY, true)
@@ -35,6 +44,7 @@ class AppPreferences(context: Context) {
 
     companion object {
         const val PREFERENCES_NAME = "glyph-lens"
+        const val CALIBRATION_KEY = "recognition.deviceCalibration"
         const val AUTO_HIDE_KEY = "display.hidesAfterDrawing"
         const val MODE_COLORS_KEY = "diagnostics.floatingWindowModeColors"
         const val CANVAS_WIDTH_KEY = "pip.canvas.width"

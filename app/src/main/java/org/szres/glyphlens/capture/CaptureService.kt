@@ -115,6 +115,15 @@ class CaptureService : Service() {
                     hidesAfterDrawing = preferences.hidesAfterDrawing
                     latestSnapshot?.let(::publishSnapshot)
                 }
+            } else if (key == AppPreferences.CALIBRATION_KEY && !preferenceStore.contains(key)) {
+                handler.post {
+                    captureEngine?.let { engine ->
+                        engine.resetCalibration()
+                        overlayVisibility.reset()
+                        hideOverlay()
+                        publishSnapshot(engine.latest)
+                    }
+                }
             }
         }
         preferenceStore.registerOnSharedPreferenceChangeListener(preferenceListener)
@@ -191,6 +200,8 @@ class CaptureService : Service() {
                 tables = tables,
                 sessionID = CaptureSessionID(SystemClock.elapsedRealtimeNanos().toULong()),
                 meter = PowerMeter.shared,
+                initialCalibration = preferences.deviceCalibration,
+                onCalibration = { preferences.deviceCalibration = it },
             )
             captureEngine = engine
             reader = createReader(size)

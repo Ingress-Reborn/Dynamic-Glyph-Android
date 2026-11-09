@@ -4,4 +4,10 @@
     <string name="home_live_glyph_title">实时 Glyph 序列</string>
     <string name="home_live_waiting">开始识别后，这里会显示当前 Glyph 序列。</string>
     <string name="overlay_preview_accessibility">由生产渲染器绘制的悬浮窗预览</string>
+    <string name="settings_calibration_title">设备识别校准</string>
+    <string name="settings_calibration_hint">首次出现空白 Glyph 点阵时，按全部 11 个点自动校准；之后沿用当前设备的校准。</string>
+    <string name="settings_calibration_saved">已保存设备校准</string>
+    <string name="settings_calibration_pending">尚未校准，等待空白 Glyph 点阵</string>
+    <string name="settings_reset_calibration">重置识别校准</string>
+    <string name="settings_calibration_reset_hint">重置后会在下一次出现空白 Glyph 点阵时重新校准。</string>
 </resources>

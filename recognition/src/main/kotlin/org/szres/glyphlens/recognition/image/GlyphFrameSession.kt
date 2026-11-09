@@ -6,13 +6,18 @@ import org.szres.glyphlens.recognition.GlyphTable
  * A live, provisional frame session. Geometry is cached, game phase is not.
  * Timestamps are monotonic seconds; gaps and clock reversals invalidate continuity.
  */
-class GlyphFrameSession(table: GlyphTable) {
+class GlyphFrameSession(
+    table: GlyphTable,
+    initialCalibration: DeviceCalibration? = null,
+    private val onCalibration: (DeviceCalibration) -> Unit = {},
+) {
     var calibration: NodeArrayDetection? = null
         private set
 
     private val recognizer = GlyphFrameRecognizer(table)
     private val detector = NodeArrayDetector()
     private var previousTime: Double? = null
+    private var savedCalibration = initialCalibration
 
     /** Last time all 11 rings matched on an empty array. */
     var validatedAt: Double? = null
@@ -31,6 +36,11 @@ class GlyphFrameSession(table: GlyphTable) {
         lastFitAttempt = Double.NEGATIVE_INFINITY
     }
 
+    fun resetCalibration() {
+        savedCalibration = null
+        reset()
+    }
+
     fun observe(frame: ImageFrame): GlyphFrameObservation? = observe(frame.luminance, frame.timeSeconds)
 
     /** Checks lifetime only. It does not claim new ring evidence or extend the empty-array deadline. */
@@ -47,7 +57,9 @@ class GlyphFrameSession(table: GlyphTable) {
             (observation?.state == GlyphFrameObservation.State.NO_STROKE && at - lastFitAttempt >= 0.5)
         ) {
             lastFitAttempt = at
-            var detected = fit?.let { detector.revalidate(image, it) }
+            val hint = fit ?: savedCalibration?.forImage(image.width, image.height)
+            var detected = hint?.let { detector.revalidate(image, it) }
+            val needsNewCalibration = detected == null
             if (detected == null) {
                 val huntStarted = System.nanoTime()
                 detected = detector.detect(image)
@@ -59,6 +71,13 @@ class GlyphFrameSession(table: GlyphTable) {
                     calibration = detected
                     validatedAt = at
                     observation = candidate
+                    if (needsNewCalibration || savedCalibration == null) {
+                        val saved = DeviceCalibration.fromDetection(detected)
+                        if (saved != savedCalibration) {
+                            savedCalibration = saved
+                            onCalibration(saved)
+                        }
+                    }
                 }
             }
         }

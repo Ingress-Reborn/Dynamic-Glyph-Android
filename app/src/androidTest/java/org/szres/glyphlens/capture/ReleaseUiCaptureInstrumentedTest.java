@@ -72,6 +72,151 @@ public final class ReleaseUiCaptureInstrumentedTest {
         verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, false, true);
     }
 
+    @Test
+    public void deviceCalibrationSurvivesCaptureRestartAndCanBeReset() throws Throwable {
+        String calibrationKey = "recognition.deviceCalibration";
+        File source = new File(context.getExternalFilesDir(null), "device-recording-184123.mp4");
+        File output = new File(context.getExternalFilesDir(null),
+                "live-release-tests/device-calibration-" + System.currentTimeMillis());
+        assertTrue("Cannot create calibration evidence directory", output.mkdirs());
+        JSONObject report = new JSONObject()
+                .put("sourceFile", source.getAbsolutePath())
+                .put("expectedGlyphForManualReview", "idea")
+                .put("glyphVerification", "Manual review of cold, restored and recalibrated input screenshots required");
+        SharedPreferences preferences = context.getSharedPreferences("glyph-lens", Context.MODE_PRIVATE);
+        String previousCalibration = preferences.getString(calibrationKey, null);
+        Boolean previousFloatingWindow = preferences.contains("display.floatingWindow")
+                ? preferences.getBoolean("display.floatingWindow", true) : null;
+        Boolean previousAutoHide = preferences.contains("display.hidesAfterDrawing")
+                ? preferences.getBoolean("display.hidesAfterDrawing", true) : null;
+        AccessibilityServiceInfo serviceInfo = automation.getServiceInfo();
+        int previousFlags = serviceInfo.flags;
+        serviceInfo.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                | AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;
+        automation.setServiceInfo(serviceInfo);
+        boolean requestedCapture = false;
+        boolean playerStarted = false;
+        try {
+            File playbackSource = fixtureForPlayer(source);
+            assertTrue("Grant display-over-other-apps before this test", Settings.canDrawOverlays(context));
+            assertTrue("Cannot start with an uncalibrated profile", preferences.edit().remove(calibrationKey)
+                    .putBoolean("display.floatingWindow", true)
+                    .putBoolean("display.hidesAfterDrawing", false).commit());
+            String savedCalibration = null;
+            for (String run : new String[] {"cold", "restored"}) {
+                requestedCapture = true;
+                context.startActivity(new Intent().setClassName(context.getPackageName(), "org.szres.glyphlens.ui.MainActivity")
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+                grantWholeScreenProjection();
+                awaitButtonText(appString("stop_capture"), 15_000);
+                if (savedCalibration != null) {
+                    assertEquals("Capture restart must preserve the device calibration", savedCalibration,
+                            preferences.getString(calibrationKey, null));
+                    report.put("profileSurvivesCaptureRestart", true);
+                }
+                playerStarted = true;
+                playFixture(playbackSource, false);
+                observeDeviceGlyph(output, run, report);
+                savedCalibration = preferences.getString(calibrationKey, null);
+                assertNotNull("The blank grid must save a device calibration", savedCalibration);
+                report.put(run + "Calibration", savedCalibration);
+                stopFixture();
+                playerStarted = false;
+                if ("cold".equals(run)) {
+                    stopSharing();
+                    requestedCapture = false;
+                }
+            }
+            launchHome();
+            awaitButtonText(appString("stop_capture"), 5_000);
+            AccessibilityNodeInfo toggle = awaitNode("overlayButton", 5_000);
+            if (appString("hide_overlay").equals(text(toggle))) click(toggle);
+            click(awaitNode("settingsButton", 5_000));
+            awaitCalibrationStatus("settings_calibration_saved");
+            saveScreenshot(new File(output, "settings-saved.png"));
+            click(awaitNode("settingsResetCalibrationButton", 5_000));
+            awaitCalibrationStatus("settings_calibration_pending");
+            assertTrue("Reset must remove the saved device profile", !preferences.contains(calibrationKey));
+            assertTrue("Reset must leave floating-window settings unchanged",
+                    preferences.getBoolean("display.floatingWindow", false)
+                            && !preferences.getBoolean("display.hidesAfterDrawing", true));
+            awaitNoFloatingSurface();
+            saveScreenshot(new File(output, "settings-reset.png"));
+            report.put("liveResetClearsCalibration", true);
+            automation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
+            awaitButtonText(appString("stop_capture"), 5_000);
+            assertNoProjectionConsent();
+            playerStarted = true;
+            playFixture(playbackSource, false);
+            observeDeviceGlyph(output, "recalibrated", report);
+            assertNotNull("The next blank grid must calibrate again after reset",
+                    preferences.getString(calibrationKey, null));
+            report.put("recalibratesWithoutRestartOrConsent", true);
+            stopFixture();
+            playerStarted = false;
+            stopSharing();
+            requestedCapture = false;
+            report.put("systemConsentApprovals", 2);
+            report.put("status", "ui_checks_passed_manual_screenshot_review_required");
+        } catch (Throwable failure) {
+            report.put("status", "failed").put("failureMessage", failure.getMessage());
+            saveScreenshot(new File(output, "failure.png"));
+            throw failure;
+        } finally {
+            try {
+                if (playerStarted) stopFixture();
+                if (requestedCapture) stopSharing();
+                SharedPreferences.Editor restore = preferences.edit();
+                if (previousCalibration == null) restore.remove(calibrationKey);
+                else restore.putString(calibrationKey, previousCalibration);
+                if (previousFloatingWindow == null) restore.remove("display.floatingWindow");
+                else restore.putBoolean("display.floatingWindow", previousFloatingWindow);
+                if (previousAutoHide == null) restore.remove("display.hidesAfterDrawing");
+                else restore.putBoolean("display.hidesAfterDrawing", previousAutoHide);
+                assertTrue("Cannot restore preferences after calibration journey", restore.commit());
+            } finally {
+                serviceInfo.flags = previousFlags;
+                automation.setServiceInfo(serviceInfo);
+                writeReport(output, report);
+            }
+        }
+    }
+
+    private void observeDeviceGlyph(File output, String run, JSONObject report) throws Exception {
+        long started = SystemClock.elapsedRealtime();
+        while (SystemClock.elapsedRealtime() - started < 10_000) {
+            assertNoProjectionConsent();
+            AccessibilityNodeInfo status = findAppNode("dragHandle");
+            if (status != null && YOUR_TURN.equals(text(status))) {
+                awaitNode("glyphDiagram", 1_000);
+                String screenshot = run + "-input.png";
+                saveScreenshot(new File(output, screenshot));
+                report.put(run + "InputElapsedMillis", SystemClock.elapsedRealtime() - started);
+                report.put(run + "InputScreenshot", screenshot);
+                return;
+            }
+            SystemClock.sleep(50);
+        }
+        throw new AssertionError("The device recording did not reach recognized input in its first playback: " + run);
+    }
+
+    private void awaitCalibrationStatus(String stringName) {
+        String expected = appString(stringName);
+        long deadline = SystemClock.elapsedRealtime() + 5_000;
+        while (SystemClock.elapsedRealtime() < deadline) {
+            AccessibilityNodeInfo status = findAppNode("settingsCalibrationStatus");
+            if (status != null && expected.equals(text(status))) return;
+            SystemClock.sleep(50);
+        }
+        throw new AssertionError("Device calibration status did not become: " + expected);
+    }
+
+    private void stopFixture() {
+        context.startActivity(new Intent().setClassName(instrumentation.getContext().getPackageName(), PLAYER)
+                .setAction(STOP_PLAYER).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                        | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+    }
+
     private void verifyJourney(String fileName, String[] expectedSequence,
             boolean autoHide, boolean hiddenJourney, boolean hideHeaderText) throws Throwable {
         File source = new File(context.getExternalFilesDir(null), fileName);

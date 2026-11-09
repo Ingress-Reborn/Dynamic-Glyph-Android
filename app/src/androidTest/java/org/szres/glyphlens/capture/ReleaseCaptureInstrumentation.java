@@ -37,6 +37,10 @@ public final class ReleaseCaptureInstrumentation extends Instrumentation {
                 journeys.mapIconsWorkWithoutTitles();
                 passed++;
             }
+            if ("calibration".equals(journey)) {
+                journeys.deviceCalibrationSurvivesCaptureRestartAndCanBeReset();
+                passed++;
+            }
             if (passed == 0) throw new IllegalArgumentException("Unknown journey: " + journey);
             results.putInt("passed", passed);
             results.putString("stream", "\nOK (" + passed + " UI journeys); Glyph screenshots require manual review.\n");

@@ -9,6 +9,28 @@ import kotlin.math.roundToInt
 
 class GameUILayoutLocatorTest {
     @Test
+    fun newlyAppearingClippedSingleMarkerIsLocatedBeforePeriodicSearch() {
+        val viewport = Viewport(603, 1508, 1.0, 0, 98)
+        val empty = viewport.place(scene(SyntheticSlotBands.Canvas().band()))
+        val blank = viewport.place(scene(SyntheticSlotBands.singleMarker()))
+        val fit = requireNotNull(NodeArrayDetector().detect(empty.luminance))
+        val locator = GameUILayoutLocator()
+        locator.observe(empty.topBand.image, fit, 0.0)
+        assertEquals(SlotStripRejection.NoMarkers, locator.lastSlotResult.exceptionOrNull())
+        val clipped = SlotStripReader().read(blank)
+        assertTrue(clipped.isFailure)
+        assertTrue(clipped.exceptionOrNull() != SlotStripRejection.NoMarkers)
+
+        locator.observe(blank.topBand.image, fit, 0.05)
+        val reading = locator.lastSlotResult.getOrThrow()
+        assertEquals(1, reading.slotCount)
+        assertEquals(null, reading.highlightedIndex)
+        locator.observe(blank.topBand.image, fit, 0.10)
+        assertTrue(locator.lastSlotUsedCache)
+        assertEquals(null, locator.lastSlotResult.getOrThrow().highlightedIndex)
+    }
+
+    @Test
     fun stableViewportReusesMarkerSamplesButReadsTheCurrentHighlight() {
         val viewport = Viewport(603, 1311, 1.0, 0, 0)
         val first = viewport.place(scene(SyntheticSlotBands.outlinedBoxes().band()))

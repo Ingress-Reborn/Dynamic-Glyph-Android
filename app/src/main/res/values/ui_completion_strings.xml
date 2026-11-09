@@ -3,4 +3,10 @@
     <string name="home_live_glyph_title">Live Glyph sequence</string>
     <string name="home_live_waiting">Start recognition to see the live Glyph sequence here.</string>
     <string name="overlay_preview_accessibility">Floating window preview drawn by the production renderer</string>
+    <string name="settings_calibration_title">Device recognition calibration</string>
+    <string name="settings_calibration_hint">On the first blank Glyph grid, calibrate automatically using all 11 points. Reuse this device calibration on later runs.</string>
+    <string name="settings_calibration_saved">Calibration saved</string>
+    <string name="settings_calibration_pending">Not calibrated; waiting for a blank Glyph grid</string>
+    <string name="settings_reset_calibration">Reset recognition calibration</string>
+    <string name="settings_calibration_reset_hint">After resetting, calibration runs again on the next blank Glyph grid.</string>
 </resources>

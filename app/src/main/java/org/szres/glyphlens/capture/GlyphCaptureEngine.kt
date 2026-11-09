@@ -15,6 +15,7 @@ import org.szres.glyphlens.recognition.SequencePredictor
 import org.szres.glyphlens.recognition.SequenceTable
 import org.szres.glyphlens.recognition.TrackingState
 import org.szres.glyphlens.recognition.image.AnalysisRateController
+import org.szres.glyphlens.recognition.image.DeviceCalibration
 import org.szres.glyphlens.recognition.image.GameUILayoutLocator
 import org.szres.glyphlens.recognition.image.GlyphFrameObservation
 import org.szres.glyphlens.recognition.image.GlyphFrameSession
@@ -35,20 +36,26 @@ class GlyphCaptureEngine internal constructor(
     private val powerSaving: () -> Boolean,
     private val meter: PowerMeter = PowerMeter(),
     private val uptimeNanos: () -> Long = SystemClock::elapsedRealtimeNanos,
+    initialCalibration: DeviceCalibration? = null,
+    onCalibration: (DeviceCalibration) -> Unit = {},
 ) : AutoCloseable {
     constructor(
         tables: TableController,
         sessionID: CaptureSessionID,
         meter: PowerMeter = PowerMeter.shared,
+        initialCalibration: DeviceCalibration? = null,
+        onCalibration: (DeviceCalibration) -> Unit = {},
     ) : this(
         shapeTable = tables.shapeTable,
         sequenceTable = tables.sequenceTable,
         sessionID = sessionID,
         powerSaving = { true },
         meter = meter,
+        initialCalibration = initialCalibration,
+        onCalibration = onCalibration,
     )
 
-    private val frameSession = shapeTable?.let(::GlyphFrameSession)
+    private val frameSession = shapeTable?.let { GlyphFrameSession(it, initialCalibration, onCalibration) }
     private val tracker = PresentationTracker(sessionID)
     private val snapshots = PresentationSnapshotFactory(sequenceTable?.let(::SequencePredictor))
     private val pace = AnalysisRateController()
@@ -263,6 +270,20 @@ class GlyphCaptureEngine internal constructor(
         return tracker.state == TrackingState.PRESENTING || tracker.state == TrackingState.INPUT ||
             tracker.state == TrackingState.COMMAND ||
             (tracker.state == TrackingState.INTERRUPTED && phaseAge >= 0.0 && phaseAge < 5.0)
+    }
+
+    fun resetCalibration() {
+        frameSession?.resetCalibration()
+        layoutLocator.reset()
+        slotReader = SlotStripReader()
+        tracker.reset()
+        sawActivity = false
+        fitFreshnessIsCurrentEpoch = false
+        latest = GlyphDisplaySnapshot.waiting(
+            sessionID = tracker.sessionID,
+            liveness = CaptureLiveness.LIVE,
+            acceptance = AcceptanceMode.TrackingSequence,
+        )
     }
 
     override fun close() {
