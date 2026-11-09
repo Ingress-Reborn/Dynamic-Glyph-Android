@@ -2,7 +2,6 @@ package org.szres.glyphlens.recognition.image
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.szres.glyphlens.recognition.RgbaFrame
@@ -97,7 +96,6 @@ class AnalysisRateControllerTest {
         assertTrue(still.drop(40).all {
             it == AnalysisRateController.Decision(AnalysisRateController.Mode.RESTING, 0.249)
         })
-        assertEquals(0.5, AnalysisRateController.headerInterval(AnalysisRateController.Mode.RESTING, false, false)!!, 0.0)
         assertEquals(
             AnalysisRateController.Decision(AnalysisRateController.Mode.RESTING, 0.249),
             controller.decide(5.0, glyph, false, false, false),
@@ -293,15 +291,6 @@ class AnalysisRateControllerTest {
             }
             assertEquals(active, fade.last())
         }
-    }
-
-    @Test
-    fun headerCadenceMatchesHackWaitingQuietAndConstrainedStates() {
-        assertEquals(0.1, AnalysisRateController.headerInterval(AnalysisRateController.Mode.ACTIVE, true, false)!!, 0.0)
-        assertEquals(0.5, AnalysisRateController.headerInterval(AnalysisRateController.Mode.ACTIVE, false, false)!!, 0.0)
-        assertNull(AnalysisRateController.headerInterval(AnalysisRateController.Mode.QUIET, false, false))
-        assertEquals(0.2, AnalysisRateController.headerInterval(AnalysisRateController.Mode.ACTIVE, true, true)!!, 0.0)
-        assertEquals(1.0, AnalysisRateController.headerInterval(AnalysisRateController.Mode.ACTIVE, false, true)!!, 0.0)
     }
 
     private fun run(

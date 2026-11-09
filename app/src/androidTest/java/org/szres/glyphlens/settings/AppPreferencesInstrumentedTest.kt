@@ -6,12 +6,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.szres.glyphlens.recognition.text.GameLanguage
 
 @RunWith(AndroidJUnit4::class)
 class AppPreferencesInstrumentedTest {
@@ -27,11 +25,10 @@ class AppPreferencesInstrumentedTest {
     fun cleanup() = clear()
 
     @Test
-    fun defaultsEnableWindowAndAutomaticLanguage() {
+    fun defaultsEnableWindowAndRealtimeRecognition() {
         assertEquals(RecognitionMode.REALTIME, preferences.recognitionMode)
         assertFalse(preferences.hidesAfterDrawing)
         assertTrue(preferences.showsFloatingWindow)
-        assertNull(preferences.gameLanguage)
         assertFalse(preferences.colorsFloatingWindowByMode)
         assertFalse(preferences.protectsFloatingWindowFromCapture)
         assertEquals(OverlayCanvasConfiguration.standard, preferences.overlayCanvas)
@@ -83,15 +80,5 @@ class AppPreferencesInstrumentedTest {
         assertEquals(OverlayCanvasConfiguration(512, 128, 3), reopened.overlayCanvas)
         assertTrue(reopened.colorsFloatingWindowByMode)
         assertTrue(reopened.protectsFloatingWindowFromCapture)
-    }
-
-    @Test
-    fun chosenAndDetectedLanguagesKeepSeparateStoredValues() {
-        preferences.gameLanguage = GameLanguage.traditionalChinese
-        preferences.detectedGameLanguage = GameLanguage.japanese
-
-        val reopened = AppPreferences(context)
-        assertEquals(GameLanguage.traditionalChinese, reopened.gameLanguage)
-        assertEquals(GameLanguage.japanese, reopened.detectedGameLanguage)
     }
 }

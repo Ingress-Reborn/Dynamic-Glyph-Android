@@ -203,9 +203,8 @@ class SlotStripReaderTest {
     }
 
     @Test
-    fun measuredLayoutKeepsHeaderStripTimerAndArrayApart() {
+    fun measuredLayoutKeepsStripTimerAndArrayApart() {
         val layout = GameUILayout()
-        assertTrue(layout.headerTextBottom <= layout.slotStripTop)
         assertTrue(layout.slotStripBottom <= layout.inputTimerBarTop)
         val fit = requireNotNull(NodeArrayDetector().detect(SyntheticRaster().image()))
         assertTrue(layout.isConsistent(fit))

@@ -3,7 +3,6 @@ package org.szres.glyphlens.ui.settings
 import android.content.Context
 import android.content.Intent
 import android.widget.Button
-import android.widget.Spinner
 import android.widget.Switch
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -16,7 +15,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.szres.glyphlens.R
 import org.szres.glyphlens.capture.CaptureService
-import org.szres.glyphlens.recognition.text.GameLanguage
 import org.szres.glyphlens.settings.AppPreferences
 import org.szres.glyphlens.settings.OverlayCanvasConfiguration
 
@@ -65,18 +63,6 @@ class SettingsActivityInstrumentedTest {
 
         assertTrue(AppPreferences(context).colorsFloatingWindowByMode)
         assertTrue(AppPreferences(context).protectsFloatingWindowFromCapture)
-    }
-
-    @Test
-    fun gameLanguageSelectionUsesTheActualLanguagePreference() {
-        val settings = launch()
-        instrumentation.runOnMainSync {
-            settings.findViewById<Spinner>(R.id.settingsGameLanguageSpinner)
-                .setSelection(GameLanguage.japanese.ordinal + 1)
-        }
-        instrumentation.waitForIdleSync()
-
-        assertEquals(GameLanguage.japanese, AppPreferences(context).gameLanguage)
     }
 
     private fun launch(): SettingsActivity {

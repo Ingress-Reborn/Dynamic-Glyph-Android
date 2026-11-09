@@ -1,6 +1,5 @@
 package org.szres.glyphlens.capture
 
-import android.os.Handler
 import android.os.SystemClock
 import org.szres.glyphlens.diagnostics.PowerMeter
 import org.szres.glyphlens.diagnostics.PowerMetric
@@ -27,29 +26,24 @@ import org.szres.glyphlens.recognition.image.toImageFrame
 import org.szres.glyphlens.recognition.session.FrameEvidence
 import org.szres.glyphlens.recognition.session.PresentationSnapshotFactory
 import org.szres.glyphlens.recognition.session.PresentationTracker
-import org.szres.glyphlens.settings.AppPreferences
 import org.szres.glyphlens.tables.TableController
 
 class GlyphCaptureEngine internal constructor(
     private val shapeTable: GlyphTable?,
     sequenceTable: SequenceTable?,
     sessionID: CaptureSessionID,
-    private val header: HeaderOcrProcessor,
     private val powerSaving: () -> Boolean,
     private val meter: PowerMeter = PowerMeter(),
     private val uptimeNanos: () -> Long = SystemClock::elapsedRealtimeNanos,
 ) : AutoCloseable {
     constructor(
         tables: TableController,
-        preferences: AppPreferences,
         sessionID: CaptureSessionID,
-        handler: Handler,
         meter: PowerMeter = PowerMeter.shared,
     ) : this(
         shapeTable = tables.shapeTable,
         sequenceTable = tables.sequenceTable,
         sessionID = sessionID,
-        header = HeaderOcrProcessor(handler, preferences.makeGameLanguageMemory(), meter),
         powerSaving = { true },
         meter = meter,
     )
@@ -78,7 +72,6 @@ class GlyphCaptureEngine internal constructor(
         private set
 
     val tableForRendering = shapeTable
-    val diagnostics: CaptureDiagnostics get() = header
 
     internal val overlayGameGeometry: OverlayGameGeometry?
         get() = frameSession?.calibration?.let { fit ->
@@ -130,6 +123,7 @@ class GlyphCaptureEngine internal constructor(
             meter.finish(PowerMetric.CONVERSION, conversionStarted)
             hasMapControl = mapControls.read(color, at) != null
             if (hasMapControl) {
+                tracker.observeMap(at)
                 sawActivity = false
                 latest = snapshot(observation = null, sourceTime = at)
                 return latest
@@ -184,32 +178,12 @@ class GlyphCaptureEngine internal constructor(
                 FrameEvidence.fromAnalysis(
                     sessionID = tracker.sessionID,
                     time = at,
-                    header = if (waitsForMapOrNextPresentation) null else header.evidence.reading(at, tracker.sessionID),
                     observation = observation,
                     slotResult = slotResult,
                     hasInputTimerBar = hasInputTimer,
                     layout = slotReader.layout,
                     calibration = fit,
                 ),
-            )
-            val headerInterval = if (savesPower) {
-                AnalysisRateController.headerInterval(decision.mode, inHack, constrained)
-            } else {
-                null
-            }
-            header.submit(
-                frame = frame,
-                image = image,
-                color = color,
-                session = tracker.sessionID,
-                readsHeader = frameSession != null && (!savesPower || headerInterval != null) &&
-                    !waitsForMapOrNextPresentation &&
-                    !(tracker.state == TrackingState.INPUT && tracker.phaseSupportedByCurrentPixels),
-                inHack = inHack,
-                constrained = constrained,
-                headerInterval = headerInterval,
-                requiresFreshHeader = hasGlyphActivity,
-                layout = slotReader.layout,
             )
             latest = snapshot(observation, at, calibration = fit)
             return latest
@@ -231,7 +205,6 @@ class GlyphCaptureEngine internal constructor(
             layoutLocator.reset()
             fitFreshnessIsCurrentEpoch = false
             sawActivity = false
-            header.evidence.invalidatePhase()
             tracker.invalidatePhase()
         }
         lastPresentation = at
@@ -285,10 +258,6 @@ class GlyphCaptureEngine internal constructor(
         hasMapControl = hasMapControl,
     )
 
-    private val waitsForMapOrNextPresentation: Boolean
-        get() = tracker.isFrozen && tracker.observedPresentationForCurrentHack &&
-            (tracker.state == TrackingState.INPUT || tracker.state == TrackingState.INTERRUPTED)
-
     private fun isInHack(at: Double): Boolean {
         val phaseAge = at - (tracker.lastPhaseTime ?: Double.NEGATIVE_INFINITY)
         return tracker.state == TrackingState.PRESENTING || tracker.state == TrackingState.INPUT ||
@@ -299,6 +268,5 @@ class GlyphCaptureEngine internal constructor(
     override fun close() {
         if (closed) return
         closed = true
-        header.close()
     }
 }

@@ -1,10 +1,12 @@
 # Glyph Lens 0.4.2：通过地图按钮自动隐藏
 
+> 历史版本：本文完整保留 0.4.2 的行为、实测、APK 与已完成发布/同步记录。0.4.3 改为全流程纯特征并移除全部 OCR，当前范围见 [FEATURE_ONLY.md](FEATURE_ONLY.md) 和 [Plan.md](../Plan.md)。本页旧数据不继承为新版本结果，旧资产下载校验也不是本轮重做要求。
+
 更新日期：2026-11-09。
 
 **本轮按主地图的五个独立按钮判断是否隐藏悬浮窗，不识别完成页。** 开启自动隐藏后，任意一个目标按钮出现即可隐藏；这个信号只控制悬浮窗可见性，不表示游戏成功、不产生 COMPLETED，也不修改 Glyph 确认和预测。
 
-此前奖励面板 / RESULT_PANEL 方案没有测试或发布，已经撤下。版本为 versionCode 6 / 0.4.2；全部改动落盘后的单元、界面、实采 **11/11**、两组尺寸和 CPU 对比已完成。生产源码 `6fd03bc9` 的正式签名包结构、**9 项实际界面流程与同包 9/9 人工截图核验全部通过**。main/Release/szres 同步尚待执行，不提前记录发布完成。
+此前奖励面板 / RESULT_PANEL 方案没有测试或发布，已经撤下。版本为 versionCode 6 / 0.4.2；全部改动落盘后的单元、界面、实采 **11/11**、两组尺寸和 CPU 对比已完成。生产源码 `6fd03bc9` 的正式签名包结构、**9 项实际界面流程与同包 9/9 人工截图核验全部通过**。main、v0.4.2 Release、下载资产校验及 szres main 同步均已完成。
 
 ## 1. 五个独立目标
 
@@ -85,7 +87,7 @@
 | 正式包结构 | arm64、表哈希、无 INTERNET、v3 签名、ZIP/ELF 16KiB、大小/哈希及包内源码标识 | 通过，详见下表 |
 | 正式界面 | 同一签名 APK 的 9 项流程、三个组件真实反射、实际通知和完全停止 | 9/9 通过 |
 | 正式截图人工核对 | 与上述 APK 相同的五图/旧三图/新三图、两模式、多轮、通知和遮挡标题/错误 English 截图 | 9/9 通过，稳定截图边界见下文 |
-| 发布 | 原仓库 main 与 v0.4.2 Release，并同步 szres main；目标仓库保留自身旧历史，最终源码一致，不 force push | 待发布 |
+| 发布 | 原仓库 main、v0.4.2 Release 和下载资产校验完成；szres main 保留自身旧历史同步，两边源码树一致，无 force push | 已完成 |
 
 真实录屏自动断言、UI 操作和截图人工核对分别记录，不在测试中抄写检测业务或伪造游戏阶段。CPU 对比固定使用五图录屏前 30 秒，覆盖输入、结果画面和回地图停留；下一轮独立做连续功能验收，不包含在这段测量窗口内。旧/新各保留三次完整原始数据，此前版本的任何降幅都不作为本轮结果。
 
@@ -121,7 +123,7 @@
 | --- | --- |
 | 文件 | `app/build/outputs/apk/release/Glyph-Lens-0.4.2-arm64.apk` |
 | 版本 | 0.4.2 / versionCode 6 |
-| 生产提交 | `6fd03bc9d4eab6c57bc1f2f21a0e60d938621422`，已推送工作分支；包内 `META-INF/version-control-info` 相同 |
+| 生产提交 | `6fd03bc9d4eab6c57bc1f2f21a0e60d938621422`，已进入 main；包内 `META-INF/version-control-info` 相同 |
 | 大小 | **15,824,427 bytes**，比 0.4.1 的 15,808,043 bytes 增加 **16,384 bytes** |
 | SHA-256 | `e5f381a0c28b8dd15bbbfc26cd131a3365a27331c1c926998b7446193e539e27` |
 | 原生库 | 仅 arm64 的 `libmlkit_google_ocr_pipeline.so`，11,064,544 bytes；3 个 ELF LOAD 段均 16,384 对齐 |
@@ -140,6 +142,8 @@
 
 本轮目标仍是 Android 10 以上 arm64、竖屏整屏共享。多尺度和相对坐标旨在通用适配，不等于所有实体机、横屏、分屏或单应用共享已经通过。模拟器录屏播放不能证明真实游戏在所有机型重新布局，也不能据此承诺实体手机长期温度和耗电。
 
-完成验证后推送 [vhu231/Dynamic-Glyph-Android](https://github.com/vhu231/Dynamic-Glyph-Android) 的 main，更新 v0.4.2 Release，再同步 [szres/dynamic-glyph-android](https://github.com/szres/dynamic-glyph-android) 的 main。目标仓库保留自身旧历史，两边最终源码一致，不使用 force push。新源码提交、测试数量、APK 大小/哈希和发布链接在真实完成后记录。
+已更新 [vhu231/Dynamic-Glyph-Android](https://github.com/vhu231/Dynamic-Glyph-Android) 的 main，并发布 [v0.4.2 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.2)，已核验为 Latest、非草稿、非预发布。标签指向验收记录提交 `6a2ef623497e7cc03d476e3c569f6fc54f7f7cb9`；APK 内嵌的生产提交仍为 `6fd03bc9d4eab6c57bc1f2f21a0e60d938621422`。
+
+发布后重新下载 [Glyph-Lens-0.4.2-arm64.apk](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.2/Glyph-Lens-0.4.2-arm64.apk)，核验为 **15,824,427 bytes**，SHA-256 **`e5f381a0c28b8dd15bbbfc26cd131a3365a27331c1c926998b7446193e539e27`**，与受测正式包及发布端资产 digest 一致。[szres/dynamic-glyph-android](https://github.com/szres/dynamic-glyph-android) 的 main 已通过目标专用合并同步，保留其既有独立历史，已核验两边源码树相同，未使用 force push。
 
 0.4.1 的已发布行为与证据保留在 [REALTIME_VISIBILITY.md](REALTIME_VISIBILITY.md)，不替换历史数据。原始外部录屏、私有素材和本地构建证据不进入源码提交，APK 作为 Release 附件交付。

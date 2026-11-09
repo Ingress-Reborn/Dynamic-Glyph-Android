@@ -4,15 +4,12 @@ import org.szres.glyphlens.recognition.CaptureSessionID
 import org.szres.glyphlens.recognition.GlyphID
 import org.szres.glyphlens.recognition.GlyphPath
 import org.szres.glyphlens.recognition.PhaseSource
-import org.szres.glyphlens.recognition.SequenceTable
 import org.szres.glyphlens.recognition.SlotObservation
 import org.szres.glyphlens.recognition.TrackingEvent
 import org.szres.glyphlens.recognition.TrackingState
 import org.szres.glyphlens.recognition.image.SlotStripReading
 import org.szres.glyphlens.recognition.image.SlotStripRejection
-import org.szres.glyphlens.recognition.text.GamePhase
 import kotlin.math.abs
-import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
 
@@ -118,8 +115,6 @@ class PresentationTracker(
     private val hypotheses = mutableListOf<Hypothesis>()
     private val slotCountVotes = mutableMapOf<Int, Int>()
     private var inferredFromIndex: Int? = null
-    private var nextInferredIndex: Int? = null
-    private var blankSince: Double? = null
     private var lastSlotReleasedSince: Double? = null
 
     private data class IndicatorPrelude(
@@ -135,6 +130,7 @@ class PresentationTracker(
     private var freshIndicatorStart = false
     private var lastStripReadingTime: Double? = null
     private var stripReturnedAfterAbsence = false
+    private var mapVisible = false
 
     /** The independently and repeatedly shown slot count; null while unproven or contradicted. */
     val expectedSlotCount: Int?
@@ -167,6 +163,7 @@ class PresentationTracker(
                 ),
             )
         }
+        mapVisible = false
         val events = mutableListOf<TrackingEvent>()
 
         lastEvidenceTime?.let { last ->
@@ -199,12 +196,31 @@ class PresentationTracker(
         val before = displayState
         events += applyPhase(evidence)
         events += applySlots(evidence)
-        events += applyFallback(evidence)
         events += applyShape(evidence)
         if (state == TrackingState.PRESENTING) stripReturnedAfterAbsence = false
         // Input-highlight movement is a reading, not a decision, but still requires a redraw.
         if (events.isNotEmpty() || displayState != before) revision += 1
         return events
+    }
+
+    fun observeMap(time: Double) {
+        lastEvidenceTime = time
+        if (mapVisible) return
+        mapVisible = true
+        invalidateTentative(time, "map controls visible")
+        state = if (hackID == 0) TrackingState.INACTIVE else TrackingState.INTERRUPTED
+        phaseSource = PhaseSource.NONE
+        phaseSupportedByCurrentPixels = false
+        observedPresentationForCurrentHack = false
+        lastPhaseTime = null
+        lastStripReadingTime = null
+        lastIndicatorTime = null
+        stripReturnedAfterAbsence = false
+        inputSlotIndex = null
+        inputHighlightTime = null
+        indicatorsObstructed = false
+        coveredSince = null
+        revision += 1
     }
 
     /** A new source-clock epoch invalidates phase timing, not committed slots or hack identity. */
@@ -235,68 +251,46 @@ class PresentationTracker(
         lastEvidenceTime = null
         lastPhaseTime = null
         inferredFromIndex = null
-        nextInferredIndex = null
-        blankSince = null
         lastSlotReleasedSince = null
         indicatorPrelude = null
         indicatorPhaseAnchor = null
         freshIndicatorStart = false
         lastStripReadingTime = null
         stripReturnedAfterAbsence = false
+        mapVisible = false
         revision += 1
     }
 
     private fun applyPhase(evidence: FrameEvidence): List<TrackingEvent> {
         val events = mutableListOf<TrackingEvent>()
-        var resolved = GamePhase.unknown
+        var target = if (state == TrackingState.INACTIVE) TrackingState.INACTIVE else TrackingState.INTERRUPTED
         var source = PhaseSource.NONE
-
-        val header = evidence.header
-        if (header != null && header.phase != GamePhase.unknown &&
-            header.sourceTime <= evidence.time &&
-            evidence.time - header.sourceTime <= policy.unknownPhaseGrace
-        ) {
-            resolved = header.phase
-            source = PhaseSource.HEADER_TEXT
-            lastPhaseTime = max(
-                lastPhaseTime ?: Double.NEGATIVE_INFINITY,
-                min(header.sourceTime, evidence.time),
-            )
-        } else if (indicatorPhaseAnchor == null) {
-            val last = lastPhaseTime
-            val retained = currentPhase
-            if (last != null && last.isFinite() && evidence.time >= last &&
-                evidence.time - last <= policy.unknownPhaseGrace && retained != null
-            ) {
-                resolved = retained
-                source = PhaseSource.RETAINED
-            }
-        }
-
-        val indicatorPresentation = presentationFromIndicators(
-            evidence,
-            contradictoryHeader = source == PhaseSource.HEADER_TEXT && resolved != GamePhase.presenting,
-        )
-        phaseSupportedByCurrentPixels = indicatorPresentation
-        if (source != PhaseSource.HEADER_TEXT && indicatorPresentation) {
-            resolved = GamePhase.presenting
-            source = PhaseSource.INDICATOR_TRANSITION
-        }
-
-        // Current pixels beat delayed OCR: otherwise player strokes could enter a presentation slot.
         if (evidence.hasInputTimerBar && evidence.hasValidCalibration &&
             observedPresentationForCurrentHack &&
             (state == TrackingState.PRESENTING || state == TrackingState.INPUT ||
-                state == TrackingState.INTERRUPTED) &&
-            resolved != GamePhase.command && resolved != GamePhase.completed
+                state == TrackingState.INTERRUPTED)
         ) {
-            resolved = GamePhase.input
+            target = TrackingState.INPUT
             source = PhaseSource.INPUT_TIMER
             phaseSupportedByCurrentPixels = true
             lastPhaseTime = evidence.time
+            indicatorPrelude = null
+            indicatorPhaseAnchor = null
+        } else if (presentationFromIndicators(evidence)) {
+            target = TrackingState.PRESENTING
+            source = PhaseSource.INDICATOR_TRANSITION
+            phaseSupportedByCurrentPixels = true
+            lastPhaseTime = evidence.time
+        } else {
+            val last = lastPhaseTime
+            if (last != null && evidence.time >= last &&
+                evidence.time - last <= policy.unknownPhaseGrace &&
+                (state == TrackingState.PRESENTING || state == TrackingState.INPUT)
+            ) {
+                target = state
+                source = PhaseSource.RETAINED
+            }
         }
-
-        val target = trackingStateFor(resolved)
         if (target == state) {
             phaseSource = source
             return events
@@ -331,36 +325,12 @@ class PresentationTracker(
             }
         }
 
-        if (target == TrackingState.COMMAND) {
-            hypotheses.clear()
-            currentSlotIndex = null
-            observedPresentationForCurrentHack = false
-            events += discardRetainedSequence(evidence.time, "command channel opened")
-        }
-
-        if (target == TrackingState.INPUT && !observedPresentationForCurrentHack) {
-            events += discardRetainedSequence(
-                evidence.time,
-                "input began but no presentation was observed",
-            )
-        }
-
         if (target == TrackingState.INPUT && !isFrozen) {
             isFrozen = true
             events += event(
                 TrackingEvent.Kind.SEQUENCE_FROZEN,
                 evidence.time,
                 reason = "player input began; presented sequence retained",
-            )
-        }
-
-        if (target == TrackingState.COMPLETED) {
-            observedPresentationForCurrentHack = false
-            isFrozen = true
-            events += event(
-                TrackingEvent.Kind.HACK_COMPLETED,
-                evidence.time,
-                reason = "completion screen",
             )
         }
 
@@ -386,18 +356,16 @@ class PresentationTracker(
         return false
     }
 
-    private fun presentationFromIndicators(
-        evidence: FrameEvidence,
-        contradictoryHeader: Boolean,
-    ): Boolean {
+    private fun presentationFromIndicators(evidence: FrameEvidence): Boolean {
         freshIndicatorStart = false
         val reading = evidence.slots
-        if (!policy.entersPresentationFromIndicators || contradictoryHeader ||
-            state == TrackingState.INPUT || !evidence.hasValidCalibration ||
-            evidence.hasInputTimerBar || reading == null
-        ) {
+        if (!policy.entersPresentationFromIndicators || state == TrackingState.INPUT || evidence.hasInputTimerBar) {
             indicatorPrelude = null
             indicatorPhaseAnchor = null
+            return false
+        }
+        if (!evidence.hasValidCalibration || reading == null) {
+            indicatorPrelude = null
             return false
         }
 
@@ -414,8 +382,8 @@ class PresentationTracker(
                     indicatorPhaseAnchor = reading
                     return true
                 }
-                // Released last indicator is the presentation tail, not a new prelude.
-                if (selected == null && anchor.highlightedIndex == reading.slotCount - 1) return true
+                // Blank intervals separate Glyphs; they do not start a new presentation.
+                if (selected == null) return evidence.shape.kind == ShapeEvidence.Kind.NO_STROKE
             }
             indicatorPhaseAnchor = null
         }
@@ -433,7 +401,6 @@ class PresentationTracker(
             return false
         }
 
-        // Swift's defer clears the prelude after this transition has been evaluated.
         val prelude = indicatorPrelude
         indicatorPrelude = null
         if (reading.highlightedIndex != 0 || prelude == null || !agrees(prelude.reading) ||
@@ -449,23 +416,6 @@ class PresentationTracker(
         return true
     }
 
-    private val currentPhase: GamePhase?
-        get() = when (state) {
-            TrackingState.COMMAND -> GamePhase.command
-            TrackingState.PRESENTING -> GamePhase.presenting
-            TrackingState.INPUT -> GamePhase.input
-            TrackingState.COMPLETED -> GamePhase.completed
-            TrackingState.INACTIVE, TrackingState.INTERRUPTED -> null
-        }
-
-    private fun trackingStateFor(phase: GamePhase): TrackingState = when (phase) {
-        GamePhase.unknown -> if (state == TrackingState.INACTIVE) TrackingState.INACTIVE else TrackingState.INTERRUPTED
-        GamePhase.command -> TrackingState.COMMAND
-        GamePhase.presenting -> TrackingState.PRESENTING
-        GamePhase.input -> TrackingState.INPUT
-        GamePhase.completed -> TrackingState.COMPLETED
-    }
-
     private fun startHack(time: Double): List<TrackingEvent> {
         hackID += 1
         slotStorage.clear()
@@ -476,8 +426,6 @@ class PresentationTracker(
         inputSlotIndex = null
         inputHighlightTime = null
         inferredFromIndex = null
-        nextInferredIndex = null
-        blankSince = null
         lastIndicatorTime = null
         indicatorsObstructed = false
         coveredSince = null
@@ -534,6 +482,7 @@ class PresentationTracker(
 
         when (state) {
             TrackingState.PRESENTING -> {
+                if (!phaseSupportedByCurrentPixels) return events
                 ensureSlots(reading.slotCount - 1)
                 val highlighted = reading.highlightedIndex
                 if (highlighted == null) {
@@ -552,8 +501,6 @@ class PresentationTracker(
                     currentSlotIndex = null
                     hypotheses.clear()
                     inferredFromIndex = null
-                    nextInferredIndex = null
-                    blankSince = null
                     events += event(
                         TrackingEvent.Kind.EVIDENCE_INVALIDATED,
                         evidence.time,
@@ -779,55 +726,9 @@ class PresentationTracker(
         )
     }
 
-    private fun applyFallback(evidence: FrameEvidence): List<TrackingEvent> {
-        if (state != TrackingState.PRESENTING || isFrozen || !evidence.hasValidCalibration ||
-            evidence.slots != null
-        ) {
-            blankSince = null
-            return emptyList()
-        }
-        // Retained phase is not enough: it could now be command entry or player input.
-        if (phaseSource != PhaseSource.HEADER_TEXT) {
-            blankSince = null
-            return emptyList()
-        }
-        if (inferredFromIndex == null) {
-            val first = currentSlotIndex
-                ?: slotStorage.indexOfFirst { !it.isSettled }.takeIf { it >= 0 }
-                ?: slotStorage.size
-            inferredFromIndex = first
-            nextInferredIndex = first
-        }
-        if (evidence.shape.kind == ShapeEvidence.Kind.NO_STROKE) {
-            if (blankSince == null) blankSince = evidence.time
-            val since = blankSince
-            val index = currentSlotIndex
-            if (since != null && evidence.time - since >= policy.minimumBlankInterval &&
-                index != null && hypotheses.isNotEmpty()
-            ) {
-                val events = finalizeCurrentSlot(
-                    evidence.time,
-                    "clear array during presentation; position unverified",
-                )
-                nextInferredIndex = index + 1
-                return events
-            }
-            return emptyList()
-        }
-        blankSince = null
-        val index = nextInferredIndex
-        if (evidence.shape.kind == ShapeEvidence.Kind.UNIQUE_VISIBLE_SHAPE &&
-            currentSlotIndex == null && index != null &&
-            index < (expectedSlotCount ?: SequenceTable.maximumLength)
-        ) {
-            return openSlot(index, evidence.time)
-        }
-        return emptyList()
-    }
-
     private fun applyShape(evidence: FrameEvidence): List<TrackingEvent> {
         val index = currentSlotIndex
-        if (state != TrackingState.PRESENTING || phaseSource == PhaseSource.NONE || index == null ||
+        if (state != TrackingState.PRESENTING || !phaseSupportedByCurrentPixels || index == null ||
             !evidence.hasValidCalibration || evidence.shape.kind != ShapeEvidence.Kind.UNIQUE_VISIBLE_SHAPE
         ) {
             return emptyList()
@@ -849,34 +750,9 @@ class PresentationTracker(
         return emptyList()
     }
 
-    private fun discardRetainedSequence(time: Double, reason: String): List<TrackingEvent> {
-        if (slotStorage.isEmpty() && slotCountVotes.isEmpty()) return emptyList()
-        val discarded = slotStorage.mapNotNull { it.glyph }.joinToString(",") { it.name }
-        slotStorage.clear()
-        hypotheses.clear()
-        slotCountVotes.clear()
-        slotCountConflict = false
-        currentSlotIndex = null
-        inputSlotIndex = null
-        inputHighlightTime = null
-        isFrozen = false
-        inferredFromIndex = null
-        nextInferredIndex = null
-        blankSince = null
-        return listOf(
-            event(
-                TrackingEvent.Kind.EVIDENCE_INVALIDATED,
-                time,
-                reason = if (discarded.isEmpty()) reason else "$reason; discarded $discarded",
-            ),
-        )
-    }
-
     private fun invalidateTentative(time: Double, reason: String): List<TrackingEvent> {
         indicatorPrelude = null
         indicatorPhaseAnchor = null
-        blankSince = null
-        nextInferredIndex = null
         if (hypotheses.isEmpty() && currentSlotIndex == null) return emptyList()
         hypotheses.clear()
         val index = currentSlotIndex
@@ -916,7 +792,6 @@ class PresentationTracker(
     }
 
     private fun sourceName(source: PhaseSource): String = when (source) {
-        PhaseSource.HEADER_TEXT -> "headerText"
         PhaseSource.RETAINED -> "retained"
         PhaseSource.INPUT_TIMER -> "inputTimer"
         PhaseSource.INDICATOR_TRANSITION -> "indicatorTransition"

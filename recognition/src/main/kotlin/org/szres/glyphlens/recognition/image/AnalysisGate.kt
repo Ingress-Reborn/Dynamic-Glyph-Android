@@ -283,13 +283,4 @@ class AnalysisRateController(val policy: Policy = Policy()) {
         burstUntil = Double.NEGATIVE_INFINITY
     }
 
-    companion object {
-        /** Header cadence, or null on a quiet screen outside a hack. */
-        @JvmStatic
-        fun headerInterval(mode: Mode, inHack: Boolean, constrained: Boolean): Double? {
-            if (mode == Mode.QUIET && !inHack) return null
-            val interval = if (inHack) 0.1 else 0.5
-            return if (constrained) interval * 2.0 else interval
-        }
-    }
 }

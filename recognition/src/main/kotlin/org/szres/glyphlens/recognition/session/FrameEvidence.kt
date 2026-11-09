@@ -8,7 +8,6 @@ import org.szres.glyphlens.recognition.image.GlyphFrameObservation
 import org.szres.glyphlens.recognition.image.NodeArrayDetection
 import org.szres.glyphlens.recognition.image.SlotStripReading
 import org.szres.glyphlens.recognition.image.SlotStripRejection
-import org.szres.glyphlens.recognition.text.HeaderReading
 
 /** The shape half of one sampled frame, reduced so tracking never touches pixels. */
 data class ShapeEvidence(
@@ -66,8 +65,6 @@ class FrameEvidence(
     val sessionID: CaptureSessionID,
     /** Source-frame timestamp in seconds, never the analysis completion time. */
     val time: Double,
-    /** Null means no header was analyzed; an unknown reading means it was analyzed and unread. */
-    val header: HeaderReading?,
     val slots: SlotStripReading?,
     val slotRejection: SlotStripRejection? = null,
     val shape: ShapeEvidence,
@@ -78,15 +75,11 @@ class FrameEvidence(
     val hasInputTimerBar: Boolean = hasInputTimerBar || slots?.hasInputTimerBar == true
 
     companion object {
-        /**
-         * Joins the production shape, strip, layout and delayed-header evidence exactly once.
-         * A geometrically inconsistent cached fit suppresses both calibration and header trust.
-         */
+        /** A cached fit must agree with the current strip before it can support a game phase. */
         @JvmStatic
         fun fromAnalysis(
             sessionID: CaptureSessionID,
             time: Double,
-            header: HeaderReading?,
             observation: GlyphFrameObservation?,
             slotResult: Result<SlotStripReading>? = null,
             hasInputTimerBar: Boolean = false,
@@ -98,7 +91,6 @@ class FrameEvidence(
             return FrameEvidence(
                 sessionID = sessionID,
                 time = time,
-                header = if (layoutConsistent || fit == null) header else null,
                 slots = slotResult?.getOrNull(),
                 slotRejection = slotResult?.exceptionOrNull() as? SlotStripRejection,
                 shape = ShapeEvidence.from(observation),

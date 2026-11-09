@@ -270,7 +270,7 @@ class RealtimeOverlayVisibilityTest {
         expectedCount: Int? = 5,
         usesSequenceTable: Boolean = true,
         state: TrackingState = TrackingState.PRESENTING,
-        phaseSource: PhaseSource = PhaseSource.HEADER_TEXT,
+        phaseSource: PhaseSource = if (state == TrackingState.INPUT) PhaseSource.INPUT_TIMER else PhaseSource.INDICATOR_TRANSITION,
         liveness: CaptureLiveness = CaptureLiveness.LIVE,
         acceptance: AcceptanceMode = AcceptanceMode.TrackingSequence,
         slotCountConflict: Boolean = false,

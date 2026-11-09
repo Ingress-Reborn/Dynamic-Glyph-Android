@@ -6,8 +6,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.szres.glyphlens.diagnostics.PowerMeter
 import org.szres.glyphlens.diagnostics.PowerMetric
-import org.szres.glyphlens.ocr.GameOcrOperation
-import org.szres.glyphlens.ocr.GameOcrOutcome
 import org.szres.glyphlens.recognition.CaptureSessionID
 import org.szres.glyphlens.recognition.GlyphID
 import org.szres.glyphlens.recognition.GlyphPath
@@ -16,12 +14,6 @@ import org.szres.glyphlens.recognition.PhaseSource
 import org.szres.glyphlens.recognition.RgbaFrame
 import org.szres.glyphlens.recognition.TrackingState
 import org.szres.glyphlens.recognition.image.AnalysisRateController
-import org.szres.glyphlens.recognition.schedule.GameTextSchedule
-import org.szres.glyphlens.recognition.text.GameLanguage
-import org.szres.glyphlens.recognition.text.GameLanguageMemory
-import org.szres.glyphlens.recognition.text.GamePhase
-import org.szres.glyphlens.recognition.text.HeaderReading
-import java.util.concurrent.Executor
 
 class GlyphCaptureEngineTest {
     private val session = CaptureSessionID(91uL)
@@ -43,7 +35,6 @@ class GlyphCaptureEngineTest {
             assertEquals(1, snapshot.total(PowerMetric.FRAME_WORK).count)
             assertEquals(1, snapshot.total(PowerMetric.CONVERSION).count)
             assertTrue(snapshot.readingMode != null)
-            assertFalse(engine.diagnostics.isReadingText)
         }
     }
 
@@ -91,7 +82,7 @@ class GlyphCaptureEngineTest {
     }
 
     @Test
-    fun visibleSlotsOrTimerKeepFullPaceBeforeTheHeaderOrArrayIsRecognized() {
+    fun visibleSlotsOrTimerKeepFullPaceBeforeTheArrayIsRecognized() {
         for (timer in listOf(false, true)) {
             val meter = PowerMeter().apply { reset() }
             fixture(meter = meter).use { engine ->
@@ -120,35 +111,22 @@ class GlyphCaptureEngineTest {
     }
 
     @Test
-    fun presentationKeepsHeaderCadenceAndFrozenInputWaitsForMapOrNextPresentationWithoutOcr() {
-        val submissions = mutableListOf<GameTextSchedule.Request>()
+    fun pixelsStartPresentationAndTheInputTimerFreezesResultsAndSkipsShapeWork() {
         val meter = PowerMeter().apply { reset() }
-        var phase = GamePhase.presenting
-        fixture(
-            meter = meter,
-            operation = GameOcrOperation { work ->
-                submissions += work.request
-                GameOcrOutcome(header = HeaderReading(phase, phase.rawValue, 1.0, work.request.sourceTime))
-            },
-        ).use { engine ->
-            engine.process(glyphScreen(1.0, rings = true, slot = true), power)
-            engine.process(glyphScreen(1.05, rings = true, slot = true), power)
-            for (step in 1..8) {
-                engine.process(glyphScreen(1.0 + step * 0.11, rings = true, slot = true, highlighted = true), power)
+        fixture(meter = meter).use { engine ->
+            for (at in listOf(1.0, 1.11, 1.22)) {
+                engine.process(glyphScreen(at, rings = true, slot = true), power)
             }
+            assertEquals(TrackingState.INACTIVE, engine.latest.state)
+            engine.process(glyphScreen(1.33, rings = true, slot = true, highlighted = true), power)
             assertEquals(TrackingState.PRESENTING, engine.latest.state)
-            assertEquals("Pixel confirmation must not restore the old 250 ms slowdown", 9, submissions.size)
-            for ((previous, current) in submissions.zipWithNext()) {
-                assertEquals(0.11, current.sourceTime - previous.sourceTime, 1e-8)
-            }
+            assertEquals(PhaseSource.INDICATOR_TRANSITION, engine.latest.phaseSource)
 
-            val lastPresentationRead = submissions.last().sourceTime
             engine.process(glyphScreen(2.0, rings = true, slot = true, timer = true), power)
             assertEquals(TrackingState.INPUT, engine.latest.state)
             assertEquals(PhaseSource.INPUT_TIMER, engine.latest.phaseSource)
             assertTrue(engine.latest.isFrozen)
             val frozen = engine.latest
-            val beforeInputReads = submissions.size
             val sampledMetrics = listOf(PowerMetric.FRAMES_ANALYSED, PowerMetric.GLYPH_READ, PowerMetric.GRID_HUNT)
             val beforeInputCounts = sampledMetrics.associateWith { meter.snapshot().total(it).count }
             for (at in listOf(2.05, 2.11, 2.22, 2.33, 2.44, 2.55, 2.66)) {
@@ -160,8 +138,6 @@ class GlyphCaptureEngineTest {
                 assertEquals(frozen.slots, engine.latest.slots)
                 assertEquals(at, engine.latest.sourceFrameTime, 1e-8)
             }
-            assertEquals("Current timer pixels keep input live without OCR", beforeInputReads, submissions.size)
-            assertEquals(lastPresentationRead, submissions.last().sourceTime, 0.0)
             val afterInputCounts = sampledMetrics.associateWith { meter.snapshot().total(it).count }
             assertEquals(beforeInputCounts.getValue(PowerMetric.FRAMES_ANALYSED) + 7,
                 afterInputCounts.getValue(PowerMetric.FRAMES_ANALYSED))
@@ -170,11 +146,9 @@ class GlyphCaptureEngineTest {
                     afterInputCounts.getValue(metric))
             }
 
-            phase = GamePhase.input
             engine.process(glyphScreen(2.8, rings = true, slot = true), power)
             assertEquals(TrackingState.INPUT, engine.latest.state)
             assertEquals(PhaseSource.RETAINED, engine.latest.phaseSource)
-            assertEquals("A missing timer must not restart completion OCR", beforeInputReads, submissions.size)
             assertEquals(afterInputCounts.getValue(PowerMetric.GLYPH_READ) + 1,
                 meter.snapshot().total(PowerMetric.GLYPH_READ).count)
             assertTrue(engine.latest.isFrozen)
@@ -182,77 +156,38 @@ class GlyphCaptureEngineTest {
 
             engine.process(glyphScreen(2.91, rings = true, slot = true), power)
             assertEquals(PhaseSource.RETAINED, engine.latest.phaseSource)
-            assertEquals(beforeInputReads, submissions.size)
             assertEquals(frozen.slots, engine.latest.slots)
-
-            for (at in listOf(3.5, 3.6, 3.7)) {
-                engine.process(glyphScreen(at, rings = true, slot = true), power)
-                assertEquals(beforeInputReads, submissions.size)
-            }
-            phase = GamePhase.presenting
-            engine.process(glyphScreen(3.8, rings = true, slot = true, highlighted = true), power)
-            assertEquals(TrackingState.PRESENTING, engine.latest.state)
-            assertEquals(frozen.hackID + 1, engine.latest.hackID)
-            assertEquals("A new pixel-proven presentation restores the normal header lane", beforeInputReads + 1, submissions.size)
-            assertEquals(3.8, submissions.last().sourceTime, 1e-8)
         }
     }
 
     @Test
-    fun constrainedPresentationKeepsTheTwoHundredMillisecondHeaderInterval() {
-        val submissions = mutableListOf<GameTextSchedule.Request>()
-        val constrained = PowerConditions.State(lowPowerMode = true, thermalStatus = 0)
-        fixture(operation = GameOcrOperation { work ->
-            submissions += work.request
-            GameOcrOutcome(header = HeaderReading(GamePhase.presenting, "GLYPH SEQUENCE", 1.0, work.request.sourceTime))
-        }).use { engine ->
-            engine.process(glyphScreen(1.0, rings = true, slot = true), constrained)
-            engine.process(glyphScreen(1.05, rings = true, slot = true), constrained)
-            for (step in 1..8) {
-                engine.process(glyphScreen(1.0 + step * 0.11, rings = true, slot = true, highlighted = true), constrained)
-            }
-            assertEquals(TrackingState.PRESENTING, engine.latest.state)
-            assertEquals(5, submissions.size)
-            for ((previous, current) in submissions.zipWithNext()) {
-                assertEquals(0.22, current.sourceTime - previous.sourceTime, 1e-8)
-            }
-        }
-    }
-
-    @Test
-    fun aMapControlSkipsShapeAndOcrWithoutCompletingOrChangingTheHack() {
-        val submissions = mutableListOf<GameTextSchedule.Request>()
+    fun aMapControlPreservesResultsAndLetsTheNextPixelSequenceStartANewHack() {
         val meter = PowerMeter().apply { reset() }
-        fixture(meter = meter, operation = GameOcrOperation { work ->
-            submissions += work.request
-            GameOcrOutcome(header = HeaderReading(GamePhase.presenting, "GLYPH SEQUENCE", 1.0, work.request.sourceTime))
-        }).use { engine ->
+        fixture(meter = meter).use { engine ->
             engine.process(mapScreen(1.0), power)
             assertTrue(engine.latest.hasMapControl)
             assertEquals(0, engine.latest.hackID)
             assertEquals(TrackingState.INACTIVE, engine.latest.state)
-            assertTrue(submissions.isEmpty())
             assertEquals(0L, meter.snapshot().total(PowerMetric.GLYPH_READ).count)
             assertEquals(0L, meter.snapshot().total(PowerMetric.GRID_HUNT).count)
 
             for (at in listOf(1.4, 1.51, 1.62)) engine.process(glyphScreen(at, rings = true, slot = true), power)
+            engine.process(glyphScreen(1.73, rings = true, slot = true, highlighted = true), power)
             assertFalse(engine.latest.hasMapControl)
             assertEquals(TrackingState.PRESENTING, engine.latest.state)
             engine.process(glyphScreen(2.0, rings = true, slot = true, timer = true), power)
             val input = engine.latest
             assertEquals(TrackingState.INPUT, input.state)
-            val reads = submissions.size
             val shapes = meter.snapshot().total(PowerMetric.GLYPH_READ).count
             val hunts = meter.snapshot().total(PowerMetric.GRID_HUNT).count
             for (at in listOf(2.4, 2.7, 3.0)) {
                 engine.process(mapScreen(at), power)
                 assertTrue(engine.latest.hasMapControl)
                 assertEquals(input.hackID, engine.latest.hackID)
-                assertEquals(input.state, engine.latest.state)
+                assertEquals(TrackingState.INTERRUPTED, engine.latest.state)
                 assertEquals(input.slots, engine.latest.slots)
                 assertEquals(input.outlook, engine.latest.outlook)
             }
-            assertEquals(reads, submissions.size)
             assertEquals(shapes, meter.snapshot().total(PowerMetric.GLYPH_READ).count)
             assertEquals(hunts, meter.snapshot().total(PowerMetric.GRID_HUNT).count)
 
@@ -261,17 +196,14 @@ class GlyphCaptureEngineTest {
             assertFalse(engine.latest.hasMapControl)
             assertEquals(TrackingState.PRESENTING, engine.latest.state)
             assertEquals(input.hackID + 1, engine.latest.hackID)
-            assertTrue(submissions.size > reads)
+            assertFalse(engine.latest.isFrozen)
         }
     }
 
     @Test
-    fun repeatedSourceFramesDoNotRefreshTheSnapshotOrReadHeaderAgain() {
-        val submissions = mutableListOf<GameTextSchedule.Request>()
-        fixture(operation = GameOcrOperation { work ->
-            submissions += work.request
-            GameOcrOutcome(header = HeaderReading(GamePhase.presenting, "GLYPH SEQUENCE", 1.0, work.request.sourceTime))
-        }).use { engine ->
+    fun repeatedSourceFramesDoNotRefreshTheSnapshotOrAnalyseAgain() {
+        val meter = PowerMeter().apply { reset() }
+        fixture(meter = meter).use { engine ->
             engine.process(glyphScreen(1.0, rings = true, slot = true), power)
             val snapshot = engine.latest
             engine.process(
@@ -283,33 +215,22 @@ class GlyphCaptureEngineTest {
                 power,
             )
             assertEquals(snapshot, engine.latest)
-            assertEquals(1, submissions.size)
+            assertEquals(1, meter.snapshot().total(PowerMetric.FRAMES_ANALYSED).count)
         }
     }
 
     private fun fixture(
-        operation: GameOcrOperation = GameOcrOperation { GameOcrOutcome() },
         meter: PowerMeter = PowerMeter(),
         uptimeNanos: () -> Long = { 0L },
         powerSaving: Boolean = true,
-    ): GlyphCaptureEngine {
-        val header = HeaderOcrProcessor(
-            languages = GameLanguageMemory(GameLanguage.english, isAutomatic = false),
-            completionExecutor = Executor { it.run() },
-            workerExecutor = Executor { it.run() },
-            operation = operation,
-            closeWorker = {},
-        )
-        return GlyphCaptureEngine(
-            shapeTable = table,
-            sequenceTable = null,
-            sessionID = session,
-            header = header,
-            powerSaving = { powerSaving },
-            meter = meter,
-            uptimeNanos = uptimeNanos,
-        )
-    }
+    ): GlyphCaptureEngine = GlyphCaptureEngine(
+        shapeTable = table,
+        sequenceTable = null,
+        sessionID = session,
+        powerSaving = { powerSaving },
+        meter = meter,
+        uptimeNanos = uptimeNanos,
+    )
 
     private fun frame(at: Double) = RgbaFrame(
         20,

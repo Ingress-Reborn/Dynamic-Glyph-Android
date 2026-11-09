@@ -120,7 +120,7 @@ class GameUILayoutLocator {
             val left = max(0.0, centerX - rowWidth / 2)
             val right = min(image.width.toDouble(), centerX + rowWidth / 2)
             if (right - left < rowWidth * 0.95) continue
-            // Convert the original measured header/track spacing into width-scaled pixels;
+            // Convert the original measured slot/track spacing into width-scaled pixels;
             // this is not an assumed frame aspect ratio. The track is then located by colour.
             val referenceHeight = rowWidth * 1311.0 / 603.0
             val margin = max(2.0, rowWidth * 0.006)
@@ -129,8 +129,6 @@ class GameUILayoutLocator {
             val candidate = GameUILayout(
                 contentLeft = left / image.width,
                 contentRight = right / image.width,
-                headerTextTop = max(0.0, top - referenceHeight * 0.044) / image.height,
-                headerTextBottom = top / image.height,
                 slotStripTop = top / image.height,
                 slotStripBottom = stripBottom / image.height,
                 inputTimerBarTop = min(image.height - 1.0, top + referenceHeight * 0.114) / image.height,

@@ -67,10 +67,6 @@ class GameUILayoutLocatorTest {
             assertEquals(viewport.toString(), 4, reading.slotCount)
             assertEquals(0, reading.highlightedIndex)
             assertTrue(viewport.toString(), reading.hasInputTimerBar)
-            val headerTop = viewport.top + 90 * viewport.scale
-            val headerBottom = viewport.top + 120 * viewport.scale
-            assertTrue(viewport.toString(), layout.headerTextTop * viewport.height <= headerTop)
-            assertTrue(viewport.toString(), layout.headerTextBottom * viewport.height >= headerBottom)
             assertSame(layout, locator.observe(frame.topBand.image, fit, 0.05))
         }
     }

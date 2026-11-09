@@ -151,7 +151,7 @@ class OverlayControllerInstrumentedTest {
             revision = 1,
             liveness = CaptureLiveness.LIVE,
             state = TrackingState.INPUT,
-            phaseSource = PhaseSource.HEADER_TEXT,
+            phaseSource = PhaseSource.INDICATOR_TRANSITION,
             acceptance = AcceptanceMode.TrackingSequence,
             sourceFrameTime = 5.0,
             evidenceArrivalUptime = 10.0,

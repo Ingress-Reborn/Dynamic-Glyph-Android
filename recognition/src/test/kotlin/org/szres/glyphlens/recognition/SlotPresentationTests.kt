@@ -45,7 +45,7 @@ class SlotPresentationTests {
         revision = 1,
         liveness = liveness,
         state = state,
-        phaseSource = PhaseSource.HEADER_TEXT,
+        phaseSource = PhaseSource.INPUT_TIMER,
         acceptance = acceptance,
         sourceFrameTime = sourceFrameTime,
         evidenceArrivalUptime = 10.0,

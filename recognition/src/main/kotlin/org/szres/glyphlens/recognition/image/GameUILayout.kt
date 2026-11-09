@@ -4,8 +4,6 @@ import kotlin.math.ceil
 
 /** Where the game's phase evidence sits, as fractions of the delivered frame. */
 data class GameUILayout(
-    var headerTextTop: Double = 0.060,
-    var headerTextBottom: Double = 0.104,
     var slotStripTop: Double = 0.104,
     var slotStripBottom: Double = 0.176,
     var inputTimerBarTop: Double = 0.218,

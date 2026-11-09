@@ -9,7 +9,6 @@ import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.ParcelFileDescriptor;
@@ -83,18 +82,18 @@ public final class ReleaseUiCaptureInstrumentedTest {
     }
 
     @Test
-    public void realtimeMapIconsWorkWithoutTitlesAndWithWrongLanguage() throws Throwable {
+    public void realtimeMapIconsWorkWithoutTitles() throws Throwable {
         verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, true, false, true);
     }
 
     @Test
-    public void powerSavingMapIconsWorkWithoutTitlesAndWithWrongLanguage() throws Throwable {
+    public void powerSavingMapIconsWorkWithoutTitles() throws Throwable {
         verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, true, false, true);
     }
 
     @Test
-    public void newThreeGlyphReleaseJourneyHidesOnMapIconsAndContinues() throws Throwable {
-        verifyJourney("real-recording-124013.mp4", new String[] {"advance", "human", "enlightenment"}, false, true, false, false);
+    public void powerSavingThreeGlyphReleaseJourneyHidesOnMapIconsAndContinues() throws Throwable {
+        verifyJourney("real-recording-124013.mp4", new String[] {"advance", "human", "enlightenment"}, true, true, false, false);
     }
 
     private void verifyJourney(String fileName, String[] expectedSequence, boolean powerSaving,
@@ -104,7 +103,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 + fileName.replace(".mp4", "") + (powerSaving ? "-power-saving" : "-realtime")
                 + (autoHide ? "-auto-hide" : "")
                 + (hiddenJourney ? "-hidden" : "")
-                + (hideHeaderText ? "-masked-title-english" : "")
+                + (hideHeaderText ? "-masked-title" : "")
                 + "-" + System.currentTimeMillis());
         assertTrue("Cannot create visual evidence directory", output.mkdirs());
         JSONObject report = new JSONObject();
@@ -116,11 +115,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
         report.put("hidesAfterDrawing", autoHide);
         report.put("startsWithHiddenWindow", !powerSaving || autoHide);
         report.put("playerProcess", instrumentation.getContext().getPackageName() + ":fixture_video");
-        report.put("languageAtStart", languagePreferences());
         report.put("headerTextMasked", hideHeaderText);
-        SharedPreferences preferences = context.getSharedPreferences("glyph-lens", Context.MODE_PRIVATE);
-        String previousChosenLanguage = preferences.getString("game.language", null);
-        String previousRememberedLanguage = preferences.getString("game.detectedLanguage", null);
         AccessibilityServiceInfo serviceInfo = automation.getServiceInfo();
         int previousFlags = serviceInfo.flags;
         serviceInfo.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -132,11 +127,6 @@ public final class ReleaseUiCaptureInstrumentedTest {
         Boolean previousPowerSaving = null;
         Boolean previousAutoHide = null;
         try {
-            if (hideHeaderText) {
-                assertTrue("Cannot select the deliberately mismatched OCR language", preferences.edit()
-                        .putString("game.language", "en").remove("game.detectedLanguage").commit());
-            }
-            report.put("mlKitRegistrarConstructors", verifyMlKitRegistrars());
             File playbackSource = fixtureForPlayer(source);
             assertTrue("Grant display-over-other-apps before this test", Settings.canDrawOverlays(context));
             launchHome();
@@ -154,7 +144,6 @@ public final class ReleaseUiCaptureInstrumentedTest {
             selectAutoHide(autoHide);
             saveScreenshot(new File(output, "home-mode.png"));
             report.put("homeModeScreenshot", "home-mode.png");
-            report.put("languageDuringCapture", languagePreferences());
             requestedCapture = true;
             click(awaitNode("primaryButton", 5_000));
             grantWholeScreenProjection();
@@ -251,7 +240,6 @@ public final class ReleaseUiCaptureInstrumentedTest {
             throw failure;
         } finally {
             try {
-                report.put("languageAtFinish", languagePreferences());
                 writeReport(output, report);
             } finally {
                 try {
@@ -275,10 +263,6 @@ public final class ReleaseUiCaptureInstrumentedTest {
                     if (previousAutoHide != null) selectAutoHide(previousAutoHide);
                     if (previousPowerSaving != null) selectMode(previousPowerSaving);
                 } finally {
-                    if (hideHeaderText) {
-                        preferences.edit().putString("game.language", previousChosenLanguage)
-                                .putString("game.detectedLanguage", previousRememberedLanguage).commit();
-                    }
                     serviceInfo.flags = previousFlags;
                     automation.setServiceInfo(serviceInfo);
                 }
@@ -301,30 +285,6 @@ public final class ReleaseUiCaptureInstrumentedTest {
             SystemClock.sleep(50);
         }
         throw new AssertionError("The fixture video window did not become visible: " + source.getName());
-    }
-
-    private JSONArray verifyMlKitRegistrars() throws Exception {
-        JSONArray verified = new JSONArray();
-        for (String name : new String[] {
-                "com.google.mlkit.common.internal.CommonComponentRegistrar",
-                "com.google.mlkit.vision.text.internal.TextRegistrar",
-                "com.google.mlkit.vision.common.internal.VisionCommonRegistrar",
-        }) {
-            Class<?> registrar = Class.forName(name, true, context.getClassLoader());
-            Object instance = registrar.getDeclaredConstructor().newInstance();
-            assertEquals("ML Kit must instantiate its manifest registrar", name, instance.getClass().getName());
-            verified.put(name);
-        }
-        return verified;
-    }
-
-    private JSONObject languagePreferences() throws Exception {
-        SharedPreferences preferences = context.getSharedPreferences("glyph-lens", Context.MODE_PRIVATE);
-        String chosen = preferences.getString("game.language", null);
-        String remembered = preferences.getString("game.detectedLanguage", null);
-        return new JSONObject().put("chosen", chosen == null ? JSONObject.NULL : chosen)
-                .put("remembered", remembered == null ? JSONObject.NULL : remembered)
-                .put("locales", context.getResources().getConfiguration().getLocales().toLanguageTags());
     }
 
     private void selectMode(boolean powerSaving) {

@@ -15,7 +15,6 @@ enum class TrackingState {
 }
 
 enum class PhaseSource {
-    HEADER_TEXT,
     RETAINED,
     INPUT_TIMER,
     INDICATOR_TRANSITION,
@@ -142,7 +141,7 @@ class GlyphDisplaySnapshot(
                 "Waiting for a Glyph hack"
             }
             DisplayStatus.COLLECTING -> if (phaseSource == PhaseSource.RETAINED) {
-                "Watching the sequence · header hidden"
+                "Watching the sequence · waiting for indicators"
             } else {
                 "Watching the sequence"
             }

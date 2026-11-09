@@ -21,30 +21,27 @@ public final class ReleaseCaptureInstrumentation extends Instrumentation {
         int passed = 0;
         try {
             ReleaseUiCaptureInstrumentedTest journeys = new ReleaseUiCaptureInstrumentedTest(this);
-            if (journey == null) {
-                journeys.fiveGlyphReleaseJourneyProducesVisualEvidence();
-                passed++;
-                journeys.threeGlyphReleaseJourneyProducesVisualEvidence();
-                passed++;
-                journeys.powerSavingReleaseJourneyStartsAndResumesFromIcon();
+            boolean pureVision = journey == null || "pureVision".equals(journey);
+            if (pureVision || "fiveGlyph".equals(journey)) {
+                journeys.realtimeMapIconsWorkWithoutTitles();
                 passed++;
             }
-            if (journey == null || "autoHide".equals(journey)) {
+            if (pureVision || "threeGlyph".equals(journey)) {
+                journeys.powerSavingThreeGlyphReleaseJourneyHidesOnMapIconsAndContinues();
+                passed++;
+            }
+            if ("autoHide".equals(journey)) {
                 journeys.autoHideReleaseJourneyHidesOnMapIconsAndContinues();
                 passed++;
                 journeys.powerSavingAutoHideReleaseJourneyContinuesAfterMapIcons();
                 passed++;
             }
-            if (journey == null || "hidden".equals(journey)) {
+            if ("hidden".equals(journey)) {
                 journeys.realtimeHiddenReleaseJourneyRevealsPredictionsAndRestoresFromNotification();
                 passed++;
             }
-            if (journey == null || "map".equals(journey)) {
-                journeys.realtimeMapIconsWorkWithoutTitlesAndWithWrongLanguage();
-                passed++;
-                journeys.powerSavingMapIconsWorkWithoutTitlesAndWithWrongLanguage();
-                passed++;
-                journeys.newThreeGlyphReleaseJourneyHidesOnMapIconsAndContinues();
+            if ("map".equals(journey)) {
+                journeys.powerSavingMapIconsWorkWithoutTitles();
                 passed++;
             }
             if (passed == 0) throw new IllegalArgumentException("Unknown journey: " + journey);
