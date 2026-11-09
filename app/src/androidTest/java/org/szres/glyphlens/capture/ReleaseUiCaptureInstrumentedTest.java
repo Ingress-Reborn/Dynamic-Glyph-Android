@@ -9,6 +9,7 @@ import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.ParcelFileDescriptor;
@@ -99,6 +100,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
         report.put("hidesAfterDrawing", autoHide);
         report.put("startsWithHiddenWindow", !powerSaving || autoHide);
         report.put("playerProcess", instrumentation.getContext().getPackageName() + ":fixture_video");
+        report.put("languageAtStart", languagePreferences());
         AccessibilityServiceInfo serviceInfo = automation.getServiceInfo();
         int previousFlags = serviceInfo.flags;
         serviceInfo.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -110,6 +112,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
         Boolean previousPowerSaving = null;
         Boolean previousAutoHide = null;
         try {
+            report.put("mlKitRegistrarConstructors", verifyMlKitRegistrars());
             File playbackSource = fixtureForPlayer(source);
             assertTrue("Grant display-over-other-apps before this test", Settings.canDrawOverlays(context));
             launchHome();
@@ -229,6 +232,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
             throw failure;
         } finally {
             try {
+                report.put("languageAtFinish", languagePreferences());
                 writeReport(output, report);
             } finally {
                 try {
@@ -273,6 +277,30 @@ public final class ReleaseUiCaptureInstrumentedTest {
             SystemClock.sleep(50);
         }
         throw new AssertionError("The fixture video window did not become visible: " + source.getName());
+    }
+
+    private JSONArray verifyMlKitRegistrars() throws Exception {
+        JSONArray verified = new JSONArray();
+        for (String name : new String[] {
+                "com.google.mlkit.common.internal.CommonComponentRegistrar",
+                "com.google.mlkit.vision.text.internal.TextRegistrar",
+                "com.google.mlkit.vision.common.internal.VisionCommonRegistrar",
+        }) {
+            Class<?> registrar = Class.forName(name, true, context.getClassLoader());
+            Object instance = registrar.getDeclaredConstructor().newInstance();
+            assertEquals("ML Kit must instantiate its manifest registrar", name, instance.getClass().getName());
+            verified.put(name);
+        }
+        return verified;
+    }
+
+    private JSONObject languagePreferences() throws Exception {
+        SharedPreferences preferences = context.getSharedPreferences("glyph-lens", Context.MODE_PRIVATE);
+        String chosen = preferences.getString("game.language", null);
+        String remembered = preferences.getString("game.detectedLanguage", null);
+        return new JSONObject().put("chosen", chosen == null ? JSONObject.NULL : chosen)
+                .put("remembered", remembered == null ? JSONObject.NULL : remembered)
+                .put("locales", context.getResources().getConfiguration().getLocales().toLanguageTags());
     }
 
     private void selectMode(boolean powerSaving) {

@@ -175,12 +175,7 @@ class GlyphCaptureEngine internal constructor(
                 FrameEvidence.fromAnalysis(
                     sessionID = tracker.sessionID,
                     time = at,
-                    header = header.evidence.reading(
-                        at,
-                        tracker.sessionID,
-                        completionSince = tracker.completionHeaderSince,
-                        completedMaximumAge = tracker.policy.unknownPhaseGrace,
-                    ),
+                    header = header.evidence.reading(at, tracker.sessionID),
                     observation = observation,
                     slotResult = slotResult,
                     hasInputTimerBar = hasInputTimer,

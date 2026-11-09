@@ -87,15 +87,6 @@ class PresentationTracker(
         private set
     var observedPresentationForCurrentHack: Boolean = false
         private set
-    private var inputStartedAt: Double? = null
-
-    /** A brief completion title can finish OCR after the input pixels have disappeared. */
-    val completionHeaderSince: Double?
-        get() = inputStartedAt.takeIf {
-            isFrozen && observedPresentationForCurrentHack &&
-                (state == TrackingState.INPUT || state == TrackingState.INTERRUPTED)
-        }
-
     var lastIndicatorTime: Double? = null
         private set
     var indicatorsObstructed: Boolean = false
@@ -185,7 +176,6 @@ class PresentationTracker(
                 phaseSource = PhaseSource.NONE
                 lastStripReadingTime = null
                 lastPhaseTime = null
-                inputStartedAt = null
             } else if (evidence.time - last > policy.maximumFrameGap) {
                 events += invalidateTentative(
                     evidence.time,
@@ -221,7 +211,6 @@ class PresentationTracker(
     fun invalidatePhase() {
         phaseSupportedByCurrentPixels = false
         lastPhaseTime = null
-        inputStartedAt = null
         if (state != TrackingState.INACTIVE) state = TrackingState.INTERRUPTED
         phaseSource = PhaseSource.NONE
         revision += 1
@@ -229,7 +218,6 @@ class PresentationTracker(
 
     fun reset() {
         phaseSupportedByCurrentPixels = false
-        inputStartedAt = null
         state = TrackingState.INACTIVE
         phaseSource = PhaseSource.NONE
         slotStorage.clear()
@@ -358,7 +346,6 @@ class PresentationTracker(
         }
 
         if (target == TrackingState.INPUT && !isFrozen) {
-            inputStartedAt = evidence.time.takeIf { observedPresentationForCurrentHack }
             isFrozen = true
             events += event(
                 TrackingEvent.Kind.SEQUENCE_FROZEN,
@@ -481,7 +468,6 @@ class PresentationTracker(
 
     private fun startHack(time: Double): List<TrackingEvent> {
         hackID += 1
-        inputStartedAt = null
         slotStorage.clear()
         hypotheses.clear()
         slotCountVotes.clear()
@@ -864,7 +850,6 @@ class PresentationTracker(
     }
 
     private fun discardRetainedSequence(time: Double, reason: String): List<TrackingEvent> {
-        inputStartedAt = null
         if (slotStorage.isEmpty() && slotCountVotes.isEmpty()) return emptyList()
         val discarded = slotStorage.mapNotNull { it.glyph }.joinToString(",") { it.name }
         slotStorage.clear()

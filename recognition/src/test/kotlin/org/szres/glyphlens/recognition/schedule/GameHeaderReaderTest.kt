@@ -198,32 +198,6 @@ class GameHeaderReaderTest {
     }
 
     @Test
-    fun `only a completion captured during drawing uses the terminal age allowance`() {
-        val phrases = listOf(
-            "Command channel open", "Incoming glyph sequence", "GO", "Glyph hack complete",
-        )
-        for (phrase in phrases) {
-            val reader = GameHeaderReader()
-            val request = reader.submit(1.0, session)!!
-            reader.finishHeader(request, listOf(phrase to 0.9))
-            assertNull(reader.reading(1.45, session))
-            assertNull(reader.reading(1.45, session, completedMaximumAge = 0.75))
-            val reading = reader.reading(1.45, session, completionSince = 0.5, completedMaximumAge = 0.75)
-            if (phrase == "Glyph hack complete") {
-                assertEquals(GamePhase.completed, reading?.phase)
-                assertEquals(1.0, reading?.sourceTime)
-                assertNotNull(reader.reading(1.75, session, completionSince = 0.5, completedMaximumAge = 0.75))
-                assertNull(reader.reading(Math.nextUp(1.75), session, completionSince = 0.5, completedMaximumAge = 0.75))
-                assertNull(reader.reading(1.1, session, completionSince = 1.05, completedMaximumAge = 0.75))
-                assertNull(reader.reading(1.45, CaptureSessionID(2UL), completionSince = 0.5, completedMaximumAge = 0.75))
-            } else {
-                assertNull(reading)
-                assertNotNull(reader.reading(1.3, session, completionSince = 0.5, completedMaximumAge = 0.75))
-            }
-        }
-    }
-
-    @Test
     fun `forged header source time is stale and rejection preserves cadence`() {
         val reader = GameHeaderReader()
         val request = reader.submit(1.0, session)!!
