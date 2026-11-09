@@ -363,7 +363,8 @@ public final class ReleaseUiCaptureInstrumentedTest {
         runShellCommand("cmd statusbar expand-notifications");
         String actionText = appString("notification_show_overlay");
         long deadline = SystemClock.elapsedRealtime() + 10_000;
-        boolean expanded = false;
+        long nextExpandRequestAt = 0;
+        int expandRequests = 0;
         try {
             while (SystemClock.elapsedRealtime() < deadline) {
                 AccessibilityNodeInfo action = findSystemNode(node -> actionText.equalsIgnoreCase(text(node))
@@ -372,19 +373,22 @@ public final class ReleaseUiCaptureInstrumentedTest {
                     saveScreenshot(new File(output, name + ".png"));
                     click(action);
                     report.put(name, new JSONObject().put("clickedActionText", actionText)
-                            .put("actualNotificationClick", true).put("screenshot", name + ".png"));
+                            .put("actualNotificationClick", true).put("expandRequests", expandRequests)
+                            .put("screenshot", name + ".png"));
                     return;
                 }
-                if (!expanded) {
-                    AccessibilityNodeInfo title = findSystemNode(node -> appString("notification_title").equals(text(node)));
-                    for (AccessibilityNodeInfo card = title; card != null; card = card.getParent()) {
-                        AccessibilityNodeInfo expand = findNode(card, node ->
-                                "android:id/expand_button".equals(node.getViewIdResourceName()));
-                        if (expand != null) {
-                            click(expand);
-                            expanded = true;
-                            break;
+                AccessibilityNodeInfo title = findSystemNode(node -> node.isVisibleToUser()
+                        && appString("notification_title").equals(text(node)));
+                for (AccessibilityNodeInfo card = title; card != null; card = card.getParent()) {
+                    if ("com.android.systemui:id/expandableNotificationRow".equals(card.getViewIdResourceName())) {
+                        if (card.isVisibleToUser() && SystemClock.elapsedRealtime() >= nextExpandRequestAt
+                                && card.getActionList().contains(AccessibilityNodeInfo.AccessibilityAction.ACTION_EXPAND)) {
+                            // Expansion is idempotent; clicking the toggle can collapse an updated notification.
+                            card.performAction(AccessibilityNodeInfo.ACTION_EXPAND);
+                            expandRequests++;
+                            nextExpandRequestAt = SystemClock.elapsedRealtime() + 250;
                         }
+                        break;
                     }
                 }
                 SystemClock.sleep(100);
@@ -414,7 +418,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 }
                 JSONObject evidence = new JSONObject().put("actionText", actionText)
                         .put("notificationTitle", appString("notification_title"))
-                        .put("expanded", expanded).put("windows", windows);
+                        .put("expandRequests", expandRequests).put("windows", windows);
                 try (OutputStreamWriter writer = new OutputStreamWriter(
                         new FileOutputStream(new File(output, treeName)), StandardCharsets.UTF_8)) {
                     writer.write(evidence.toString(2));
@@ -438,6 +442,11 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 .put("contentDescription", String.valueOf(node.getContentDescription()))
                 .put("visible", node.isVisibleToUser()).put("clickable", node.isClickable())
                 .put("enabled", node.isEnabled()).put("bounds", bounds.toShortString());
+        JSONArray actions = new JSONArray();
+        for (AccessibilityNodeInfo.AccessibilityAction action : node.getActionList()) {
+            actions.put(action.getId());
+        }
+        tree.put("actions", actions);
         JSONArray children = new JSONArray();
         for (int index = 0; index < node.getChildCount(); index++) {
             AccessibilityNodeInfo child = node.getChild(index);

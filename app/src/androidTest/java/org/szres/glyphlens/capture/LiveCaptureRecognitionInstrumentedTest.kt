@@ -642,7 +642,8 @@ class LiveCaptureRecognitionInstrumentedTest {
         val label = context.getString(R.string.notification_show_overlay)
         val title = context.getString(R.string.notification_title)
         runShell("cmd statusbar expand-notifications")
-        var expanded = false
+        var expandRequests = 0
+        var nextExpandAt = 0L
         try {
             var action: AccessibilityNodeInfo? = null
             await("Notification does not expose its Show floating window action", 5_000) {
@@ -650,15 +651,19 @@ class LiveCaptureRecognitionInstrumentedTest {
                     it.packageName?.toString() == "com.android.systemui" && it.isVisibleToUser &&
                         it.text?.toString()?.equals(label, ignoreCase = true) == true
                 }
-                if (action == null && !expanded) {
+                if (action == null && SystemClock.elapsedRealtime() >= nextExpandAt) {
                     var card = findInWindows {
-                        it.packageName?.toString() == "com.android.systemui" && it.text?.toString() == title
+                        it.packageName?.toString() == "com.android.systemui" && it.isVisibleToUser &&
+                            it.text?.toString() == title
                     }?.parent
                     while (card != null) {
-                        val expand = findNode(card) { it.viewIdResourceName == "android:id/expand_button" && it.isClickable }
-                        if (expand != null) {
-                            click(expand)
-                            expanded = true
+                        if (card.viewIdResourceName == "com.android.systemui:id/expandableNotificationRow") {
+                            if (card.isVisibleToUser && card.actionList.any { it.id == AccessibilityNodeInfo.ACTION_EXPAND }) {
+                                // ACTION_EXPAND cannot collapse a row while the shade animation is still updating.
+                                card.performAction(AccessibilityNodeInfo.ACTION_EXPAND)
+                                expandRequests++
+                                nextExpandAt = SystemClock.elapsedRealtime() + 250
+                            }
                             break
                         }
                         card = card.parent
@@ -687,7 +692,7 @@ class LiveCaptureRecognitionInstrumentedTest {
                     .writeText(JSONObject().apply {
                         put("expectedAction", label)
                         put("expectedTitle", title)
-                        put("expanded", expanded)
+                        put("expandRequests", expandRequests)
                         put("windows", windows)
                     }.toString(2))
             } catch (diagnosticFailure: Throwable) {
