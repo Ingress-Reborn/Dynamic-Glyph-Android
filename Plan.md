@@ -81,4 +81,4 @@ CSV、系统图像缓冲区和文件读取在各自入口解析与校验，内�
 
 当前范围以本计划和 [FEATURE_ONLY.md](Docs/FEATURE_ONLY.md) 为准。[VISUAL_COMPLETION.md](Docs/VISUAL_COMPLETION.md) 是 0.4.2 已发布证据；[REALTIME_VISIBILITY.md](Docs/REALTIME_VISIBILITY.md)、[CALIBRATED_VISION.md](Docs/CALIBRATED_VISION.md)、[POWER_MODES.md](Docs/POWER_MODES.md) 与 [GLYPH_ONLY.md](Docs/GLYPH_ONLY.md) 保留更早版本记录，不覆盖其原始数据。
 
-`Apps/`、`Packages/`、`Tools/` 的 iOS 参考与研发材料不进入 Android 包。原始外部录屏、私有素材和构建输出不提交源码仓库；移除 OCR 的包大小变化以本地实际产物为准，不删除验证素材来宣称瘦身。
+2026-11-09 仓库清理已移除 `Apps/`、`Packages/`、`Config/`、iOS 脚本、私有素材子模块及过时平台文档。`Tools/MapControls/` 保留为 Android 模板生成源；构建入口见 [ANDROID.md](Docs/ANDROID.md)，数据来源见 [PROVENANCE.md](Docs/PROVENANCE.md)。原始外部录屏、私有素材和构建输出不提交源码仓库；移除 OCR 的包大小变化以本地实际产物为准，不删除验证素材来宣称瘦身。

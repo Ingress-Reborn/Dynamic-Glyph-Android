@@ -45,7 +45,7 @@
 
 单个在途 OCR 请求、请求与返回的源帧时间一致性、**0.35 秒标题来源年龄**及 **0.75 秒阶段 grace**不变。100/200ms 表示允许提交的最小间隔，不保证 OCR 在该时间内完成，也不改写旧 OCR 的 sourceTime。
 
-主要源码：[GlyphCaptureEngine](../app/src/main/java/org/szres/glyphlens/capture/GlyphCaptureEngine.kt)、[PresentationTracker](../recognition/src/main/kotlin/org/szres/glyphlens/recognition/session/PresentationTracker.kt)、[PresentationSnapshotFactory](../recognition/src/main/kotlin/org/szres/glyphlens/recognition/session/PresentationSnapshotFactory.kt)、[GameHeaderReader](../recognition/src/main/kotlin/org/szres/glyphlens/recognition/schedule/GameHeaderReader.kt)。
+主要源码：[GlyphCaptureEngine](../app/src/main/java/org/szres/glyphlens/capture/GlyphCaptureEngine.kt)、[PresentationTracker](../recognition/src/main/kotlin/org/szres/glyphlens/recognition/session/PresentationTracker.kt)、[PresentationSnapshotFactory](../recognition/src/main/kotlin/org/szres/glyphlens/recognition/session/PresentationSnapshotFactory.kt)、[GameHeaderReader](https://github.com/vhu231/Dynamic-Glyph-Android/blob/2901166d4145a53c8e1deaf8f9ed217f8961c227/recognition/src/main/kotlin/org/szres/glyphlens/recognition/schedule/GameHeaderReader.kt)。
 
 ## 3. 保留已经证实必要的通用适配
 
@@ -58,7 +58,7 @@
 
 没有品牌、型号或分辨率参数名单。通用机制不等于所有 Android 设备已验证：引擎仍限定 `frame.width < frame.height`，当前目标是**竖屏整屏共享**。横屏、方形和折叠设备横屏，以及单应用共享/分屏到全屏悬浮窗的坐标映射尚未认证。
 
-采集尺寸使用系统内容变化回调更新；这项实现不替代上述共享模式的实测。平台依据见 [Android MediaProjection 内容尺寸说明](https://developer.android.com/media/grow/media-projection)。旧实现根因和对应旧包证据归档于 [ANDROID_ADAPTATION.md](ANDROID_ADAPTATION.md)。
+采集尺寸使用系统内容变化回调更新；这项实现不替代上述共享模式的实测。平台依据见 [Android MediaProjection 内容尺寸说明](https://developer.android.com/media/grow/media-projection)。旧实现根因和对应旧包证据归档于 [ANDROID_ADAPTATION.md](https://github.com/vhu231/Dynamic-Glyph-Android/blob/2901166d4145a53c8e1deaf8f9ed217f8961c227/Docs/ANDROID_ADAPTATION.md)。
 
 ## 4. 为什么仍保留离线 OCR
 
@@ -74,7 +74,7 @@ Google 官方区分随包模型与通过 Play 服务下载的模型：前者增�
 
 继续遵守 [Plan.md 第 2 节](../Plan.md#2-强制通用规则) 中用户七条原文：不扩大范围处理猜测风险；入口校验一次；只在复用、复杂逻辑或清晰概念需要时抽取；正常流程与细节分开；只注释不明显约束；生成文件改源头；测试真实实现并少用 mock。
 
-本轮精简直接删除不需要的产品入口、执行路径和依赖，不建立可选功能框架或插件系统来保留旧业务。`Apps/`、`Packages/`、`Tools/` 只作为源码参考和研发材料；源 iOS 工程不修改。
+本轮精简直接删除不需要的产品入口、执行路径和依赖，不建立可选功能框架或插件系统来保留旧业务。当时保留的 iOS 参考材料已在后续 Android 仓库清理中移除；独立的源 iOS 仓库不修改。
 
 ## 6. 本轮验收记录
 
@@ -95,7 +95,7 @@ Google 官方区分随包模型与通过 Play 服务下载的模型：前者增�
 | 实际交付 Release UI 黑盒 | 2 项真实 UI 旅程通过，逐 Glyph 截图人工核对完成 | 自动断言仅覆盖 Watching→Your turn 及持续 3 秒；不声称逐 Glyph 自动断言 |
 | 物理 ARM64 手机、实体温度与长期功耗 | 尚未测量 | 下述环境与 CPU 不能替代 |
 
-当前已签名 Release 文件：[Glyph-Lens-0.2.0-arm64.apk](../app/build/outputs/apk/release/Glyph-Lens-0.2.0-arm64.apk)。
+当前已签名 Release 文件：Glyph-Lens-0.2.0-arm64.apk（本机历史产物，不随仓库分发）。
 
 | 产物字段 | 值 |
 | --- | --- |
@@ -153,4 +153,4 @@ adb am instrument -w org.szres.glyphlens.test/org.szres.glyphlens.capture.Releas
 
 Release 截图采样会影响 CPU，**此轮不测量性能**。测试结束后已确认 MediaProjection 为 null，显示恢复为 1216×2688 / 440dpi，实际交付签名 Release 保持安装。最后重跑生产构建与 Lint 通过，仍为 0 error、26 warning，签名包哈希未变化。
 
-旧 [GLYPH_PREDICTION.md](GLYPH_PREDICTION.md)、[ANDROID_ADAPTATION.md](ANDROID_ADAPTATION.md) 和 [精简前计划](HISTORY/PLAN_BEFORE_GLYPH_ONLY_2026-11-09.md) 保留原版本历史证据。旧 18 次矩阵、旧 CPU 区间或旧测试计数未在本节复用为新版本验收；物理 ARM64 手机、横屏及前述共享模式边界仍保持未认证状态。
+旧 [GLYPH_PREDICTION.md](https://github.com/vhu231/Dynamic-Glyph-Android/blob/2901166d4145a53c8e1deaf8f9ed217f8961c227/Docs/GLYPH_PREDICTION.md)、[ANDROID_ADAPTATION.md](https://github.com/vhu231/Dynamic-Glyph-Android/blob/2901166d4145a53c8e1deaf8f9ed217f8961c227/Docs/ANDROID_ADAPTATION.md) 和 [精简前计划](https://github.com/vhu231/Dynamic-Glyph-Android/blob/2901166d4145a53c8e1deaf8f9ed217f8961c227/Docs/HISTORY/PLAN_BEFORE_GLYPH_ONLY_2026-11-09.md) 保留原版本历史证据。旧 18 次矩阵、旧 CPU 区间或旧测试计数未在本节复用为新版本验收；物理 ARM64 手机、横屏及前述共享模式边界仍保持未认证状态。

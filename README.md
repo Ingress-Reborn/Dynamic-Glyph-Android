@@ -53,7 +53,11 @@ ML Kit、四类模型、阶段 OCR 与专属 ProGuard 规则已移除。本地 `
 | [VISUAL_COMPLETION.md](Docs/VISUAL_COMPLETION.md) | 0.4.2 地图自动隐藏、CPU 与已发布结果 |
 | [REALTIME_VISIBILITY.md](Docs/REALTIME_VISIBILITY.md) | 0.4.1 原始行为、验证与发布 |
 | [CALIBRATED_VISION.md](Docs/CALIBRATED_VISION.md) | 0.4.0 固定采样与负载历史 |
-| `Apps/`、`Packages/`、`Tools/` | iOS 参考与研发资料，不进入 Android 包 |
+| `Tools/MapControls/` | Android 地图按钮模板生成器 |
+| [ANDROID.md](Docs/ANDROID.md) | Android 构建与增量验证 |
+| [PROVENANCE.md](Docs/PROVENANCE.md) | CSV 与测试素材来源 |
+
+本仓库仅维护 Android 版本，已移除 iOS/Swift 工程、Xcode 配置、旧研发脚本及私有素材子模块。源码历史仍由 Git 保留。
 
 CSV 的原始换行与内容保持。历史文档中的 OCR、模型、语言选项与测试数据按原版本理解，不覆盖本版去 OCR 范围。
 
@@ -63,4 +67,4 @@ CSV 的原始换行与内容保持。历史文档中的 OCR、模型、语言选
 
 原项目名称与图标、第三方游戏素材及商标的说明见 [NOTICE.md](NOTICE.md)，贡献约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。Android 工作名称为 Glyph Lens，不改变原代码版权和许可条件。
 
-部分真实截图、录屏和参考测试输入未随仓库分发。缺少这些素材的测试需明确标为跳过，不能算作识别通过；原输入来源记录见 [测试素材说明](Packages/GlyphRecognition/Tests/GlyphRecognitionTests/Fixtures/PROVENANCE.md)。
+部分真实截图、录屏和参考测试输入未随仓库分发。缺少这些素材的测试需明确标为跳过，不能算作识别通过；现有 CSV 与图像素材来源见 [测试素材说明](Docs/PROVENANCE.md)。

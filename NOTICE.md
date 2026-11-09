@@ -11,16 +11,9 @@ documentation. It does not cover the things below.
 The name "Dynamic Glyph" and the app's icons are reserved by ChestnutLUO and
 are not licensed, under the PolyForm Noncommercial License or otherwise. A
 copy or changed version you share must use its own name and icon, so that
-nobody mistakes it for this app. That covers every variant of the icon in this
-repository:
-
-- `Apps/DynamicGlyph/DynamicGlyph.icon/Assets/DynamicGlyph-Box.svg`
-- `Apps/DynamicGlyph/DynamicGlyph.icon/Assets/DynamicGlyph-Cover.svg`
-- `Apps/DynamicGlyph/Widget/AppMark.xcassets/AppMark.imageset/AppMark@2x.png`
-- `Apps/DynamicGlyph/Widget/AppMark.xcassets/AppMark.imageset/AppMark@3x.png`
-- `Apps/DynamicGlyph/Widget/AppMark.xcassets/AppMark.imageset/AppMark-dark@2x.png`
-- `Apps/DynamicGlyph/Widget/AppMark.xcassets/AppMark.imageset/AppMark-dark@3x.png`
-- `Apps/DynamicGlyph/Widget/ControlSymbols.xcassets/dynamicglyph.control.symbolset/user-control-symbol.svg`
+nobody mistakes it for the original app. The upstream iOS icon variants were
+removed from this Android repository. Glyph Lens uses its own name and icon;
+the original name and artwork remain reserved.
 
 ## The game
 
@@ -29,12 +22,12 @@ with or endorsed by Niantic Spatial. The game's name is used here only to say
 which game the app works with.
 
 The game's imagery, text and other trademarks belong to their owners and are
-not licensed here. Screenshots of the game are not included in this
-repository. The game's interface text in `Docs/GAME_TEXT_TRANSLATIONS*.csv`
-and in the recognition code is quoted only so that the app can recognise it.
+not licensed here. The Android test resources include isolated game-interface crops and masked
+fixtures; original recordings and full map frames are not distributed here.
 
 ## Reference tables
 
-The Glyph and sequence reference tables some tests use are third-party data
-and are not distributed here. See their
-[provenance](Packages/GlyphRecognition/Tests/GlyphRecognitionTests/Fixtures/PROVENANCE.md).
+The Android app bundles third-party Glyph and sequence CSV tables. Their source,
+existing licensing notice and the test-image provenance are documented in
+[Docs/PROVENANCE.md](Docs/PROVENANCE.md). The code license does not grant rights
+to those third-party materials.
