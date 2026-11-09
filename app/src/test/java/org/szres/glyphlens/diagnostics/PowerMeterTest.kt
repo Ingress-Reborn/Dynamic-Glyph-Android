@@ -96,6 +96,24 @@ class PowerMeterTest {
     }
 
     @Test
+    fun aSnapshotRetainsItsCountersAfterMoreFramesArrive() {
+        val clock = Clock()
+        val meter = meter(clock)
+        meter.reset()
+        clock.now += 100
+        meter.record(PowerMetric.GLYPH_READ, 100)
+        val before = meter.snapshot()
+        clock.now += 250
+        meter.record(PowerMetric.GLYPH_READ, 250)
+        val after = meter.snapshot()
+
+        assertEquals(1L, before.total(PowerMetric.GLYPH_READ).count)
+        assertEquals(100L, before.total(PowerMetric.GLYPH_READ).nanoseconds)
+        assertEquals(2L, after.total(PowerMetric.GLYPH_READ).count)
+        assertEquals(350L, after.total(PowerMetric.GLYPH_READ).nanoseconds)
+    }
+
+    @Test
     fun rollingWindowKeepsSixtySecondsAndTotalsEverything() {
         val window = PowerWindow(2)
         window.record(0, second = 100)

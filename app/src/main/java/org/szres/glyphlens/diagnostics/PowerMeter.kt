@@ -74,7 +74,7 @@ class PowerWindow(val metrics: Int) {
     private var buckets = Array(metrics * seconds) { PowerTally() }
     private val stamps = LongArray(seconds) { Long.MIN_VALUE }
 
-    fun totals(): List<PowerTally> = totals.asList()
+    fun totals(): List<PowerTally> = totals.toList()
 
     fun record(metric: Int, count: Long = 1, nanoseconds: Long = 0, second: Long, at: Long? = null) {
         require(metric in 0 until metrics && count >= 0 && nanoseconds >= 0)
