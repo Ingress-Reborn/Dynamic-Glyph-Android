@@ -137,8 +137,8 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 report.put("beforePlaybackHidden", hidden);
                 observeHidden(output, "before-playback-hidden", hidden);
             }
-            playFixture(playbackSource);
             playerStarted = true;
+            playFixture(playbackSource);
             if (powerSaving) {
                 JSONObject standby = new JSONObject();
                 report.put("initialStandby", standby);
@@ -262,7 +262,17 @@ public final class ReleaseUiCaptureInstrumentedTest {
     private void playFixture(File source) {
         context.startActivity(new Intent().setClassName(instrumentation.getContext().getPackageName(), PLAYER)
                 .putExtra("video", source.getAbsolutePath()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+                        | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        long deadline = SystemClock.elapsedRealtime() + 10_000;
+        while (SystemClock.elapsedRealtime() < deadline) {
+            for (AccessibilityWindowInfo window : automation.getWindows()) {
+                AccessibilityNodeInfo root = window.getRoot();
+                if (root != null && root.isVisibleToUser()
+                        && instrumentation.getContext().getPackageName().equals(String.valueOf(root.getPackageName()))) return;
+            }
+            SystemClock.sleep(50);
+        }
+        throw new AssertionError("The fixture video window did not become visible: " + source.getName());
     }
 
     private void selectMode(boolean powerSaving) {
