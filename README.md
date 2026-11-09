@@ -2,7 +2,7 @@
 
 Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android 应用。**0.4.2 只做 Glyph 识别与序列预测，仅支持 arm64；自动隐藏改为可选的“返回地图后自动隐藏”。** 使用传统视觉分别寻找地图的五个按钮，任意一个出现就隐藏窗口，不读取完成标题，也不把返回地图当作游戏成功。
 
-当前行为和验收记录见 [VISUAL_COMPLETION.md](Docs/VISUAL_COMPLETION.md)，实施约束及用户七条规则见 [Plan.md](Plan.md)。核心 **248 项（245 通过、3 私有素材跳过）**，其中检测器 **12 项**；Android 单元 **102 项**、界面 **20 项**、完整实采 **11 项**及 720×1600、1080×1920 两组尺寸通过。五图、预测、新三图歧义、连续两轮、通知、省电和遮挡标题/错误语言回归已验证；匹配 CPU 对比已完成，正式签名包与发布仍待完成。0.4.1 证据保留在 [REALTIME_VISIBILITY.md](Docs/REALTIME_VISIBILITY.md)。
+当前行为和验收记录见 [VISUAL_COMPLETION.md](Docs/VISUAL_COMPLETION.md)，实施约束及用户七条规则见 [Plan.md](Plan.md)。核心 **248 项（245 通过、3 私有素材跳过）**，其中检测器 **12 项**；Android 单元 **102 项**、界面 **20 项**、实采 **11 项**及两组额外尺寸通过，CPU 对比已完成。生产源码 `6fd03bc9` 的正式签名包结构、**9 项实际界面流程及同包 9/9 人工截图核验全部通过**。main、Release 和目标仓库同步尚待执行；0.4.1 证据保留在 [REALTIME_VISIBILITY.md](Docs/REALTIME_VISIBILITY.md)。
 
 ## 当前功能
 
@@ -43,7 +43,7 @@ Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android �
 .\gradlew.bat :recognition:test :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug :app:assembleRelease :app:lintRelease
 ```
 
-0.4.2 使用 versionCode 6。Release 继续启用 R8、仅打包 arm64，并精确保留 ML Kit 的三个实际反射构造入口。计划产物为 `app/build/outputs/apk/release/Glyph-Lens-0.4.2-arm64.apk`；最终大小、SHA-256、签名、权限和 16KiB 对齐在统一验收后记录。其他阶段仍使用随包 OCR，不能因地图判断改为传统视觉就声称已移除全部 OCR 模型或体积。
+0.4.2 使用 versionCode 6。Release 继续启用 R8、仅打包 arm64，并精确保留 ML Kit 的三个实际反射构造入口。正式产物为 `app/build/outputs/apk/release/Glyph-Lens-0.4.2-arm64.apk`，**15,824,427 bytes**（约 15.82MB / 15.09MiB），比 0.4.1 增加 16,384 bytes；SHA-256 为 `e5f381a0c28b8dd15bbbfc26cd131a3365a27331c1c926998b7446193e539e27`。v3 签名、ZIP/ELF 16KiB、原始表哈希、无 INTERNET 权限及包内源码 `6fd03bc9` 已核验；同一签名包的 9 项流程、实际反射构造、完全停止和人工图形核对通过。
 
 完成测试后更新 [vhu231/Dynamic-Glyph-Android](https://github.com/vhu231/Dynamic-Glyph-Android) 的 main 和 v0.4.2 Release，再同步 [szres/dynamic-glyph-android](https://github.com/szres/dynamic-glyph-android) 的 main。目标仓库保留自身旧历史，两边最终源码一致，不 force push。当前已发布旧版为 [v0.4.1](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.1)，不把旧 APK 或测试记录当成本轮产物。
 
