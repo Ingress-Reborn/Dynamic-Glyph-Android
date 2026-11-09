@@ -4,7 +4,7 @@
 
 **0.4.4 / versionCode 8 删除省电模式和待命悬浮图标。打开 App，完成必要的系统授权后直接开始识别，不再选择模式或点击图标启动。** 本轮只调整启动、设置与窗口入口；已有纯特征识别、预测、地图五目标和自适应节流保持。
 
-当前实现与增量验收尚待完成，暂不记录本版测试、产物或发布通过。八条用户规则见 [Plan.md](../Plan.md#2-强制通用规则)，0.4.3 的原始实现和实测保留在 [FEATURE_ONLY.md](FEATURE_ONLY.md)。
+生产源码 `3304554`，增量构建、一项正式 APK 自动启动流程及五张重点截图人工核对已通过，已发布 v0.4.4。八条用户规则见 [Plan.md](../Plan.md#2-强制通用规则)，0.4.3 的原始实现和实测保留在 [FEATURE_ONLY.md](FEATURE_ONLY.md)。
 
 ## 行为与设置
 
@@ -26,17 +26,20 @@
 
 沿用仓库现有工具和流程，只检查本次改变的路径，不重新验证未改变的识别算法或性能。
 
-- [ ] 新启动流程：打开 App、必要系统授权、授权后直接识别，不依赖模式选择或图标点击。
-- [ ] 设置默认 true/true，已有显式值保留，两开关独立，关闭显示不会被自动隐藏重新强开。
-- [ ] 省电模式和待命图标入口删除，停止与必要的现有窗口操作保持可用。
-- [ ] 一项现有正式 APK 五图连续两轮流程，实际看图确认新启动与设置衔接，无待命步骤。
-- [ ] 使用现有方式构建本地正式 APK，记录必要本地产物结果，不新增下载 SHA 流程。
-- [ ] 验收后推送原仓库 main、发布 v0.4.4，并按既有方式同步目标 main。
+| 本轮检查 | 结果 |
+| --- | --- |
+| 一次增量构建 | `:app:assembleRelease` 与 `:app:assembleDebugAndroidTest` 成功，用时 35 秒；仅附带原有 lintVital |
+| 正式 APK | `Glyph-Lens-0.4.4-arm64.apk`，409,597 字节，约 0.410 MB |
+| 一项正式自动启动流程 | 通过：授权后无需开始按钮；两个默认开关、独立性及采集中设置生效均符合预期 |
+| 同流程五图两轮与停止 | 下一轮无需重启或重新授权即可显示并回地图隐藏，明确停止已验证，设备无屏幕共享 |
+| 五张重点截图人工核对 | 通过：设置双开关开启，首页无模式和两开关、可见停止；两轮 `question / less / forget / all / lie` 均为正确实线且无 X 行，下一轮地图稳定画面有真实按钮且无 Glyph 浮层 |
 
-不跑全仓库测试、不重跑无关算法或尺寸矩阵、不重复 CPU 对比、不下载 APK 验 SHA，也不引入仓库没在使用的工具或流程。Release 自带的必要构建任务沿用现有配置。实际通过结果在本轮执行后一次补充，旧测试数据不继承为 0.4.4 验收。
+本地证据为 `build/v044-validation/build.log`、`release-auto-start.log`、`package.json`；正式流程报告位于 `build/v044-validation/release-ui/real-recording-auto-start-auto-hide-1794216478929`。
+
+没有运行旧 JVM 用例、全单元、完整 Lint、重复 Debug 设备流程、多尺寸矩阵或 CPU 对比，没有下载 APK 验 SHA，也未引入新工具或流程。旧测试及性能数据不继承为 0.4.4 验收。
 
 ## 交付与边界
 
-交付继续使用 [vhu231/Dynamic-Glyph-Android](https://github.com/vhu231/Dynamic-Glyph-Android) 的 main 与 Release，并同步 [szres/dynamic-glyph-android](https://github.com/szres/dynamic-glyph-android) 的 main；目标保留自身历史，不 force push。本版测试与发布当前待执行。
+交付入口为 [v0.4.4 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.4) 和 [Glyph-Lens-0.4.4-arm64.apk](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.4/Glyph-Lens-0.4.4-arm64.apk)。生产源码已推送原仓库 main，v0.4.4 标签指向 `3304554`，Latest Release 与 409,597 字节 APK 已发布。按既有安排将最终代码和文档同步 [szres/dynamic-glyph-android](https://github.com/szres/dynamic-glyph-android) 的 main，保留目标自身历史、不 force push。
 
 平台仍为既有 Android 10 以上、arm64 交付目标和竖屏整屏共享。本轮不新增全机型适配承诺，不把旧版 CPU 或包大小作为新版本实测。

@@ -2,7 +2,7 @@
 
 Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android 应用。**0.4.4 删除省电模式和待命悬浮图标，打开 App 完成必要系统授权后直接开始识别。** 全流程纯特征识别、预测和自适应节流保持，不包含 OCR 或语言设置。
 
-本轮行为与增量验收见 [AUTO_START.md](Docs/AUTO_START.md)，用户八条规则见 [Plan.md](Plan.md)。当前 0.4.4 测试、本地产物与发布待执行；只验证启动、设置、去待命的变化及一项正式五图两轮，不复做未改变算法的测试或 CPU 对比。
+本轮行为与增量验收见 [AUTO_START.md](Docs/AUTO_START.md)，用户八条规则见 [Plan.md](Plan.md)。本轮增量构建、一项正式 APK 自动启动、设置、五图两轮流程及五张重点截图人工核对已通过，已发布 v0.4.4；不继承旧版算法或 CPU 测量结果。
 
 ## 使用与设置
 
@@ -21,9 +21,11 @@ Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android �
 
 ## 构建与交付
 
-版本为 **0.4.4 / versionCode 8**，继续使用仓库已有 Kotlin/Views/Canvas、Gradle Wrapper 与 R8 流程。只增量检查启动、设置和去待命路径，加一项正式 APK 五图连续两轮并实际查看关键截图。
+版本为 **0.4.4 / versionCode 8**，生产源码 `3304554`。沿用现有流程的一次增量构建用时 35 秒，正式 APK 为 **409,597 字节，约 0.410 MB**。一项正式 APK 流程已验证无需开始按钮、两个默认开关、开关独立及采集中设置生效；五图下一轮无需重启或重新授权即可显示并回地图隐藏，最终停止后无屏幕共享。五张重点截图人工核对通过，两轮五图的第 4、5 图正确，地图稳定画面无 Glyph 浮层。
 
-不跑全仓库、重复 Debug 设备流程或 CPU 对比，不下载 APK 验 SHA，不引入仓库没在使用的工具或流程。本地包与实际结果完成后记录，验收后按既有安排推送 [原仓库 main](https://github.com/vhu231/Dynamic-Glyph-Android)、更新 Release 并同步 [目标 main](https://github.com/szres/dynamic-glyph-android)，保留目标自身历史、不 force push。
+交付入口：[v0.4.4 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.4) · [Glyph-Lens-0.4.4-arm64.apk](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.4/Glyph-Lens-0.4.4-arm64.apk)。生产源码已推送原仓库 main，v0.4.4 标签指向 `3304554`，Latest Release 与 APK 已发布。按既有安排同步 [目标 main](https://github.com/szres/dynamic-glyph-android)，保留目标自身历史、不 force push。
+
+本轮没有运行全单元、完整 Lint、重复 Debug 设备流程、多尺寸或 CPU 对比，没有下载 APK 验 SHA。仅保留 Release 构建自带的 lintVital，未引入新工具或流程。
 
 交付目标仍是 Android 10 / API 29 以上的 arm64、竖屏整屏共享；不要求 root、无障碍服务或麦克风。本轮不新增横屏、分屏、单应用共享或所有机型的适配结论。
 
@@ -38,7 +40,7 @@ Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android �
 | `app/`、`recognition/` | Android 平台层与纯 Kotlin 识别核心 |
 | `Apps/`、`Packages/`、`Tools/` | 既有 iOS 参考与研发资料，不进入 Android 包 |
 
-上一已发布版本为 [v0.4.3](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.3)。历史测试、APK 大小和 CPU 数字只代表原版本，不继承为 0.4.4 结果。iOS 源工程不修改。
+历史版本见 [v0.4.3](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.3)。历史测试、APK 大小和 CPU 数字只代表原版本，不继承为 0.4.4 结果。iOS 源工程不修改。
 
 ## 许可证与来源
 
