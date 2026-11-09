@@ -11,6 +11,7 @@ class MapControlReader {
     private companion object {
         val BUTTON_SURROUND = intArrayOf(112, 248, 540, 792, 912, 775, 515, 231)
         val LAYER_INTERIOR = intArrayOf(398, 400, 464)
+        val BRIEFCASE_INTERIOR = intArrayOf(462, 592, 594)
     }
 
     enum class Kind { DIAMOND, SIGNAL, LAYERS, PLUS, BRIEFCASE }
@@ -156,10 +157,15 @@ class MapControlReader {
                 if (++misses > allowedBrightMisses) return false
             }
         }
-        if (pattern.kind == Kind.LAYERS) {
-            // The top layer is filled; an outlined letter can match its edge probes.
+        val interior = when (pattern.kind) {
+            Kind.LAYERS -> LAYER_INTERIOR
+            Kind.BRIEFCASE -> BRIEFCASE_INTERIOR
+            else -> null
+        }
+        if (interior != null) {
+            // These icons are filled; an outlined letter can match their edge probes.
             var filled = 0
-            for (point in LAYER_INTERIOR) {
+            for (point in interior) {
                 val x = (located.left + (point % 32) * located.scale).roundToInt()
                 val y = (located.top + (point / 32) * located.scale).roundToInt()
                 if (bright(image, x, y, neutral = true)) filled++
