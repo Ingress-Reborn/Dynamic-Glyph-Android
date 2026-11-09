@@ -2,7 +2,7 @@
 
 Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android 应用。**0.4.3 将全流程改为纯特征识别，移除全部 OCR、ML Kit、四类模型和游戏语言设置。** 阶段由槽位高亮变迁、点阵和输入计时条驱动；保留 Glyph 识别与序列预测、实时/省电模式及可选地图自动隐藏。
 
-当前实施范围和重点验收见 [FEATURE_ONLY.md](Docs/FEATURE_ONLY.md)，用户八条规则见 [Plan.md](Plan.md)。本轮只按仓库现有流程增量验证受影响路径，不重跑无关全套，不做旧 CPU 对照，不上传或下载 APK 验 SHA。0.4.3 测试、本地 APK 检查和发布尚待执行；0.4.2 已发布记录完整保留为历史，不继承为本轮结果。
+当前实现与增量验收见 [FEATURE_ONLY.md](Docs/FEATURE_ONLY.md)，用户八条规则见 [Plan.md](Plan.md)。生产源码 `6fea790` 的 **11 项重点 JVM 测试、2 项正式 APK 双轮流程和 10 张关键截图人工核对通过**。本地 APK 仅 **417,845 bytes（约 0.418MB）**，比 0.4.2 小 **97.36%**。本轮没有重跑无关全套、做 CPU 对照或上传/下载 APK 验 SHA；0.4.2 记录继续保留为历史。
 
 ## 当前行为
 
@@ -26,9 +26,11 @@ Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android �
 
 ## 本轮构建与验证
 
-0.4.3 使用 versionCode 7，继续使用 Kotlin、Android Views/Canvas、Gradle Wrapper、JDK 17 和本机 Android SDK。只跑受影响的纯视觉 tracker 与生产像素 pipeline/engine JVM 用例，以及现有正式 APK runner 的两项：实时遮挡标题的五图两轮、省电新三图两轮，并实际查看截图核对各图。不重复跑 Debug 设备流程、全单元、Lint 或多尺寸矩阵。
+0.4.3 使用 versionCode 7。现有流程中的 8 项 Tracker、1 项 SessionPipeline、2 项 GlyphCaptureEngine 测试 **11/11 通过，无跳过或失败**；一次增量构建完成 Release 和测试 APK。正式 runner 的实时遮标题五图两轮、省电新三图两轮 **2/2 通过**，本轮实际查看 10 张关键截图。五图后两项正确，确认与预测样式保持；新三图在第三项真实确认后显示，两项均回地图隐藏并彻底停止。
 
-移除 ML Kit、Latin/中文/日文/韩文模型、阶段 OCR 调度及 OCR 专属 ProGuard 规则，不加入替代 OCR 或推理库。按现有方式检查**本地 APK 大小与没有 OCR 依赖、模型和原生库**；保留 NDK arm64 配置，不为强制 ABI 添加空库。实际大小完成后记录，本轮不新增上传/下载 APK 哈希验证。
+ML Kit、四类模型、阶段 OCR 与专属 ProGuard 规则已移除。本地 `Glyph-Lens-0.4.3-arm64.apk` 为 **417,845 bytes**，检查无 OCR 依赖/资产及任何原生库；保留 NDK arm64 配置，没有为强制 ABI 添加空库。本轮未跑重复 Debug 设备流程、全单元、主动完整 Lint 或多尺寸矩阵；Release 自带 lintVital 随构建执行，没有额外工具或哈希下载流程。
+
+生产源码 `6fea790` 已进入原仓库 main，v0.4.3 标签指向该生产提交，[v0.4.3 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.3) 已发布为 Latest，[0.4.3 APK](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.3/Glyph-Lens-0.4.3-arm64.apk) 已上传。未为发布校验下载 APK 或计算 SHA；目标仓库同步沿用现有流程。
 
 0.4.2 的 CPU 36.46% 降幅属于旧版本对照。0.4.3 不复做旧 CPU 对比，也不根据删除 OCR 推算新百分比或实体手机温度/续航变化。
 
