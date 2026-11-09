@@ -210,7 +210,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 showFromNotification(output, "map-notification", report);
                 JSONObject hidden = new JSONObject();
                 report.put("mapStillHidesAfterNotification", hidden);
-                observeHidden(output, "map-after-notification", hidden, 750);
+                observeMapHideAfterNotification(output, "map-after-notification", hidden);
             }
             if (hiddenJourney) {
                 click(awaitNode("closeOverlay", 5_000));
@@ -404,6 +404,36 @@ public final class ReleaseUiCaptureInstrumentedTest {
         report.put("recognitionPanelAbsent", true);
         report.put("standbyIconAbsent", true);
         report.put("screenshot", name + ".png");
+    }
+
+    private void observeMapHideAfterNotification(File output, String name, JSONObject report) throws Exception {
+        long started = SystemClock.elapsedRealtime();
+        long hiddenSince = -1;
+        int visibilityResets = 0;
+        while (SystemClock.elapsedRealtime() - started < 5_000) {
+            assertNoProjectionConsent();
+            boolean hidden = findAppNode("glyphDiagram") == null && findAppNode("dragHandle") == null
+                    && findAppNode("closeOverlay") == null && findAppNode("startRecognitionIcon") == null;
+            long now = SystemClock.elapsedRealtime();
+            if (hidden) {
+                if (hiddenSince < 0) hiddenSince = now;
+                if (now - hiddenSince >= 750) {
+                    saveScreenshot(new File(output, name + ".png"));
+                    report.put("observedMillis", now - started);
+                    report.put("stableHiddenMillis", now - hiddenSince);
+                    report.put("visibilityResets", visibilityResets);
+                    report.put("recognitionPanelAbsent", true);
+                    report.put("standbyIconAbsent", true);
+                    report.put("screenshot", name + ".png");
+                    return;
+                }
+            } else {
+                if (hiddenSince >= 0) visibilityResets++;
+                hiddenSince = -1;
+            }
+            SystemClock.sleep(50);
+        }
+        throw new AssertionError("After notification Show on the map, all floating controls must stay hidden for 750 ms within five seconds");
     }
 
     private void awaitNoFloatingSurface() {
