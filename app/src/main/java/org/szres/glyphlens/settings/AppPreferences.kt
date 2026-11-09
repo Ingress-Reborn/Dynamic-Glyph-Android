@@ -5,15 +5,8 @@ import android.content.Context
 class AppPreferences(context: Context) {
     private val values = context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
-    var recognitionMode: RecognitionMode
-        get() {
-            val stored = values.getString(RECOGNITION_MODE_KEY, null)
-            return RecognitionMode.entries.firstOrNull { it.rawValue == stored } ?: RecognitionMode.REALTIME
-        }
-        set(value) = values.edit().putString(RECOGNITION_MODE_KEY, value.rawValue).apply()
-
     var hidesAfterDrawing: Boolean
-        get() = values.getBoolean(AUTO_HIDE_KEY, false)
+        get() = values.getBoolean(AUTO_HIDE_KEY, true)
         set(value) = values.edit().putBoolean(AUTO_HIDE_KEY, value).apply()
 
     var showsFloatingWindow: Boolean
@@ -42,7 +35,6 @@ class AppPreferences(context: Context) {
 
     companion object {
         const val PREFERENCES_NAME = "glyph-lens"
-        const val RECOGNITION_MODE_KEY = "capture.recognitionMode"
         const val AUTO_HIDE_KEY = "display.hidesAfterDrawing"
         const val MODE_COLORS_KEY = "diagnostics.floatingWindowModeColors"
         const val CANVAS_WIDTH_KEY = "pip.canvas.width"

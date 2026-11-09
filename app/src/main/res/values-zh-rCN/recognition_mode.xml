@@ -1,19 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="recognition_mode_title">识别模式</string>
-    <string name="recognition_mode_realtime">实时</string>
-    <string name="recognition_mode_power_saving">省电</string>
-    <string name="recognition_mode_realtime_hint">授权屏幕共享后，后台自动识别，整组识别或唯一预测就绪后显示窗口，每轮一次。点击 × 完全隐藏窗口并继续识别，也可从通知栏显示悬浮窗。</string>
-    <string name="recognition_mode_power_saving_hint">授权屏幕共享后，点击悬浮图标开始识别。未开启自动隐藏时，点击 × 停止识别并回到图标。待命时不处理画面和文字，系统屏幕共享授权仍保持。</string>
-    <string name="status_standby">待命中。点击悬浮图标开始识别。</string>
-    <string name="status_standby_hidden">待命中。悬浮图标已隐藏，可在首页恢复显示。</string>
-    <string name="stop_sharing">停止屏幕共享</string>
-    <string name="home_live_standby">识别已停止。准备好后，点击悬浮图标开始。</string>
-    <string name="notification_standby_text">屏幕共享授权保持中。点击悬浮图标开始识别；使用本通知或应用中的停止按钮结束共享。</string>
-    <string name="notification_standby_title">Glyph Lens 正在待命</string>
+    <string name="automatic_recognition_hint">打开应用并授权屏幕共享后自动识别，结果就绪后自动显示。悬浮窗和返回地图后自动隐藏可在设置中调整。</string>
     <string name="status_running_hidden">窗口已隐藏，后台继续识别。完整结果就绪后每轮自动显示一次，也可从通知栏显示悬浮窗。</string>
     <string name="notification_show_overlay">显示悬浮窗</string>
-    <string name="notification_realtime_hidden_text">窗口已隐藏，识别继续运行。结果就绪后每轮自动显示一次，也可点击显示悬浮窗。</string>
+    <string name="notification_hidden_text">窗口已隐藏，识别继续运行。结果就绪后每轮自动显示一次，也可点击显示悬浮窗。</string>
     <string name="overlay_hide">隐藏悬浮窗</string>
     <string name="auto_hide_after_drawing">返回地图后自动隐藏</string>
     <string name="auto_hide_after_drawing_hint">检测到主地图上的任一按钮时隐藏窗口，后台继续识别。开启后只保留可拖动的 Glyph 画布，可从通知栏停止识别。</string>

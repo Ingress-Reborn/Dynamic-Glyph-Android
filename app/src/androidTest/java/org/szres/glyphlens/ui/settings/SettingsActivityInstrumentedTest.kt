@@ -9,6 +9,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -35,6 +36,24 @@ class SettingsActivityInstrumentedTest {
         activity?.let { current -> instrumentation.runOnMainSync { current.finish() } }
         instrumentation.waitForIdleSync()
         clear()
+    }
+
+    @Test
+    fun windowAndMapHidingAreEnabledByDefaultAndPersistIndependently() {
+        val settings = launch()
+        assertTrue(settings.findViewById<Switch>(R.id.floatingWindowSwitch).isChecked)
+        assertTrue(settings.findViewById<Switch>(R.id.autoHideSwitch).isChecked)
+        instrumentation.runOnMainSync {
+            settings.findViewById<Switch>(R.id.floatingWindowSwitch).performClick()
+            settings.findViewById<Switch>(R.id.autoHideSwitch).performClick()
+            settings.finish()
+        }
+        val reopened = launch()
+        assertFalse(reopened.findViewById<Switch>(R.id.floatingWindowSwitch).isChecked)
+        assertFalse(reopened.findViewById<Switch>(R.id.autoHideSwitch).isChecked)
+        instrumentation.runOnMainSync { reopened.findViewById<Switch>(R.id.autoHideSwitch).performClick() }
+        assertTrue(AppPreferences(context).hidesAfterDrawing)
+        assertFalse(AppPreferences(context).showsFloatingWindow)
     }
 
     @Test

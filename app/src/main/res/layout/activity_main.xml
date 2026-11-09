@@ -23,54 +23,11 @@
             android:textColor="@color/secondary_text"
             android:textSize="15sp" />
         <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/recognition_mode_title"
-            android:textColor="@color/primary_text"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-        <RadioGroup
-            android:id="@+id/recognitionModeGroup"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-            <RadioButton
-                android:id="@+id/realtimeModeButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:minHeight="48dp"
-                android:text="@string/recognition_mode_realtime"
-                android:textColor="@color/primary_text" />
-            <RadioButton
-                android:id="@+id/powerSavingModeButton"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:minHeight="48dp"
-                android:text="@string/recognition_mode_power_saving"
-                android:textColor="@color/primary_text" />
-        </RadioGroup>
-        <TextView
-            android:id="@+id/recognitionModeHint"
+            android:id="@+id/automaticRecognitionHint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            android:text="@string/recognition_mode_realtime_hint"
-            android:textColor="@color/secondary_text"
-            android:textSize="14sp" />
-        <Switch
-            android:id="@+id/autoHideSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:text="@string/auto_hide_after_drawing"
-            android:textColor="@color/primary_text" />
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            android:text="@string/auto_hide_after_drawing_hint"
+            android:text="@string/automatic_recognition_hint"
             android:textColor="@color/secondary_text"
             android:textSize="14sp" />
         <TextView
@@ -94,13 +51,6 @@
             android:layout_height="wrap_content"
             android:text="@string/hide_overlay"
             android:visibility="gone" />
-        <Switch
-            android:id="@+id/floatingWindowSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minHeight="48dp"
-            android:text="@string/floating_window"
-            android:textColor="@color/primary_text" />
         <Button
             android:id="@+id/openIngressButton"
             android:layout_width="match_parent"

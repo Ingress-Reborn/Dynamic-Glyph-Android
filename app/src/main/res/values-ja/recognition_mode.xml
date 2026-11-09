@@ -1,19 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="recognition_mode_title">認識モード</string>
-    <string name="recognition_mode_realtime">リアルタイム</string>
-    <string name="recognition_mode_power_saving">省電力</string>
-    <string name="recognition_mode_realtime_hint">画面共有を許可すると、ウィンドウを隠したまま自動認識します。全項目の認識または一意の予測がそろうと、各ラウンドで一度だけ表示します。× はウィンドウだけを隠し、認識を続けます。通知からも再表示できます。</string>
-    <string name="recognition_mode_power_saving_hint">画面共有を許可した後、フローティングアイコンをタップすると認識を開始します。自動非表示がオフの場合、× で停止してアイコンに戻ります。待機中は画面や文字を処理せず、画面共有の許可は維持されます。</string>
-    <string name="status_standby">待機中です。フローティングアイコンをタップして認識を開始してください。</string>
-    <string name="status_standby_hidden">待機中です。フローティングアイコンは非表示になっています。ホーム画面から再表示できます。</string>
-    <string name="stop_sharing">画面共有を停止</string>
-    <string name="home_live_standby">認識は停止しています。準備ができたらフローティングアイコンをタップしてください。</string>
-    <string name="notification_standby_text">画面共有の許可は維持されています。アイコンをタップすると認識を開始します。共有を終了するには、この通知またはアプリの停止ボタンを使ってください。</string>
-    <string name="notification_standby_title">Glyph Lens は待機中です</string>
+    <string name="automatic_recognition_hint">アプリを開いて画面共有を許可すると、自動で認識を開始します。結果がそろうと自動表示します。フローティングウィンドウとマップに戻ったときの自動非表示は設定で変更できます。</string>
     <string name="status_running_hidden">ウィンドウを隠して認識を続けています。結果がそろうと各ラウンドで一度だけ自動表示します。通知からもウィンドウを表示できます。</string>
     <string name="notification_show_overlay">フローティングウィンドウを表示</string>
-    <string name="notification_realtime_hidden_text">ウィンドウを隠して認識を続けています。結果は各ラウンドで一度だけ自動表示します。今すぐ開くには「フローティングウィンドウを表示」をタップしてください。</string>
+    <string name="notification_hidden_text">ウィンドウを隠して認識を続けています。結果は各ラウンドで一度だけ自動表示します。今すぐ開くには「フローティングウィンドウを表示」をタップしてください。</string>
     <string name="overlay_hide">フローティングウィンドウを隠す</string>
     <string name="auto_hide_after_drawing">マップに戻ったら自動で隠す</string>
     <string name="auto_hide_after_drawing_hint">メインマップのいずれかのボタンを検出するとウィンドウを隠し、バックグラウンドで認識を続けます。オンにするとドラッグできる Glyph キャンバスだけを表示します。認識は通知から停止できます。</string>

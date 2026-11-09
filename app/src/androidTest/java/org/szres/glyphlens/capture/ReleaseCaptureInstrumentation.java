@@ -21,27 +21,20 @@ public final class ReleaseCaptureInstrumentation extends Instrumentation {
         int passed = 0;
         try {
             ReleaseUiCaptureInstrumentedTest journeys = new ReleaseUiCaptureInstrumentedTest(this);
-            boolean pureVision = journey == null || "pureVision".equals(journey);
-            if (pureVision || "fiveGlyph".equals(journey)) {
-                journeys.realtimeMapIconsWorkWithoutTitles();
+            if (journey == null || "autoStart".equals(journey)) {
+                journeys.openingAppStartsFiveGlyphRecognitionWithDefaultMapHiding();
                 passed++;
             }
-            if (pureVision || "threeGlyph".equals(journey)) {
-                journeys.powerSavingThreeGlyphReleaseJourneyHidesOnMapIconsAndContinues();
-                passed++;
-            }
-            if ("autoHide".equals(journey)) {
-                journeys.autoHideReleaseJourneyHidesOnMapIconsAndContinues();
-                passed++;
-                journeys.powerSavingAutoHideReleaseJourneyContinuesAfterMapIcons();
+            if ("threeGlyph".equals(journey)) {
+                journeys.threeGlyphReleaseJourneyProducesVisualEvidence();
                 passed++;
             }
             if ("hidden".equals(journey)) {
-                journeys.realtimeHiddenReleaseJourneyRevealsPredictionsAndRestoresFromNotification();
+                journeys.hiddenReleaseJourneyRevealsPredictionsAndRestoresFromNotification();
                 passed++;
             }
             if ("map".equals(journey)) {
-                journeys.powerSavingMapIconsWorkWithoutTitles();
+                journeys.mapIconsWorkWithoutTitles();
                 passed++;
             }
             if (passed == 0) throw new IllegalArgumentException("Unknown journey: " + journey);

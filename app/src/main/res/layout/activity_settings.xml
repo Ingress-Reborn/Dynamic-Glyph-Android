@@ -23,6 +23,27 @@
             android:textColor="@color/primary_text"
             android:textSize="20sp"
             android:textStyle="bold" />
+        <Switch
+            android:id="@+id/floatingWindowSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/floating_window"
+            android:textColor="@color/primary_text" />
+        <Switch
+            android:id="@+id/autoHideSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/auto_hide_after_drawing"
+            android:textColor="@color/primary_text" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:text="@string/auto_hide_after_drawing_hint"
+            android:textColor="@color/secondary_text"
+            android:textSize="14sp" />
         <TextView
             android:id="@+id/settingsCanvasWidthLabel"
             android:layout_width="match_parent"

@@ -3,7 +3,7 @@
     <!-- Machine-written; Needs Review by a native-speaking Ingress player. Not human-reviewed. -->
     <string name="app_name">Glyph Lens</string>
     <string name="home_title">Glyph Lens</string>
-    <string name="status_ready">已就緒。開始工作階段，然後切換到 Ingress。</string>
+    <string name="status_ready">已就緒。授權螢幕分享後，請切換到 Ingress。</string>
     <string name="status_waiting">正在等待螢幕共享授權…</string>
     <string name="status_starting">正在啟動螢幕擷取…</string>
     <string name="status_running">正在擷取和辨識。請切換到 Ingress，並讓視窗避開 Glyph 槽位。</string>

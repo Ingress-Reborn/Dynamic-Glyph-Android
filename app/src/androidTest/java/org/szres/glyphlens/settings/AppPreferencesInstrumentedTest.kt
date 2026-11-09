@@ -25,9 +25,8 @@ class AppPreferencesInstrumentedTest {
     fun cleanup() = clear()
 
     @Test
-    fun defaultsEnableWindowAndRealtimeRecognition() {
-        assertEquals(RecognitionMode.REALTIME, preferences.recognitionMode)
-        assertFalse(preferences.hidesAfterDrawing)
+    fun defaultsEnableWindowAndMapHiding() {
+        assertTrue(preferences.hidesAfterDrawing)
         assertTrue(preferences.showsFloatingWindow)
         assertFalse(preferences.colorsFloatingWindowByMode)
         assertFalse(preferences.protectsFloatingWindowFromCapture)
@@ -35,38 +34,15 @@ class AppPreferencesInstrumentedTest {
     }
 
     @Test
-    fun recognitionModePersistsAndUnknownStoredModesUseRealtime() {
-        preferences.recognitionMode = RecognitionMode.POWER_SAVING
-        assertEquals(RecognitionMode.POWER_SAVING, AppPreferences(context).recognitionMode)
-        val store = context.getSharedPreferences(AppPreferences.PREFERENCES_NAME, Context.MODE_PRIVATE)
-        assertEquals("powerSaving", store.getString(AppPreferences.RECOGNITION_MODE_KEY, null))
-
-        store.edit().putString(AppPreferences.RECOGNITION_MODE_KEY, "unknown-mode").commit()
-        assertEquals(RecognitionMode.REALTIME, AppPreferences(context).recognitionMode)
-    }
-
-    @Test
-    fun automaticHidingPersistsIndependentlyOfRecognitionMode() {
-        preferences.hidesAfterDrawing = true
-        preferences.recognitionMode = RecognitionMode.POWER_SAVING
-
+    fun windowAndMapHidingPersistIndependently() {
+        preferences.showsFloatingWindow = false
+        assertTrue(preferences.hidesAfterDrawing)
+        preferences.hidesAfterDrawing = false
         val reopened = AppPreferences(context)
-        assertTrue(reopened.hidesAfterDrawing)
-        reopened.recognitionMode = RecognitionMode.REALTIME
-        assertTrue(AppPreferences(context).hidesAfterDrawing)
-        reopened.hidesAfterDrawing = false
-        assertFalse(AppPreferences(context).hidesAfterDrawing)
-    }
-
-    @Test
-    fun removedAutomaticStopPreferenceDoesNotEnableAutomaticHiding() {
-        val store = context.getSharedPreferences(AppPreferences.PREFERENCES_NAME, Context.MODE_PRIVATE)
-        store.edit().putBoolean("capture.stopsAfterRound", true).commit()
-
-        assertFalse(AppPreferences(context).hidesAfterDrawing)
-        assertFalse(store.contains(AppPreferences.AUTO_HIDE_KEY))
-        preferences.hidesAfterDrawing = true
-        assertTrue(store.getBoolean(AppPreferences.AUTO_HIDE_KEY, false))
+        assertFalse(reopened.showsFloatingWindow)
+        assertFalse(reopened.hidesAfterDrawing)
+        reopened.hidesAfterDrawing = true
+        assertFalse(AppPreferences(context).showsFloatingWindow)
         assertTrue(AppPreferences(context).hidesAfterDrawing)
     }
 

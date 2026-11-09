@@ -11,10 +11,8 @@ import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.ImageButton
 import android.widget.TextView
 import androidx.annotation.MainThread
 import org.szres.glyphlens.R
@@ -23,13 +21,11 @@ import org.szres.glyphlens.recognition.GlyphDisplaySnapshot
 import org.szres.glyphlens.recognition.GlyphTable
 import org.szres.glyphlens.settings.AppPreferences
 import org.szres.glyphlens.settings.OverlayWindowGeometry
-import org.szres.glyphlens.settings.RecognitionMode
 
 @MainThread
 @SuppressLint("InflateParams")
 class OverlayController(
     context: Context,
-    private val onStartRecognition: () -> Unit,
     private val onClose: () -> Unit,
 ) {
     private val applicationContext = context.applicationContext
@@ -44,8 +40,6 @@ class OverlayController(
     private val statusLabel: TextView = view.findViewById(R.id.dragHandle)
     private val controls: View = view.findViewById(R.id.overlayControls)
     private val closeButton: Button = view.findViewById(R.id.closeOverlay)
-    private val standbyIcon = LayoutInflater.from(applicationContext)
-        .inflate(R.layout.overlay_standby, null) as ImageButton
     private val layoutParams = WindowManager.LayoutParams(
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.WRAP_CONTENT,
@@ -58,19 +52,7 @@ class OverlayController(
         // Leave the array clear until its measured geometry can place the window precisely.
         y = (screenSize().height * 0.18).toInt()
     }
-    private val standbyParams = WindowManager.LayoutParams(
-        WindowManager.LayoutParams.WRAP_CONTENT,
-        WindowManager.LayoutParams.WRAP_CONTENT,
-        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-        PixelFormat.TRANSLUCENT,
-    ).apply {
-        gravity = Gravity.TOP or Gravity.START
-        x = 16
-        y = (screenSize().height * 0.18).toInt()
-    }
     private var attached = false
-    private var standbyAttached = false
     private var preferencesRegistered = false
     private var latest: LatestRender? = null
     private val placement = OverlayPlacement()
@@ -89,24 +71,16 @@ class OverlayController(
     }
 
     init {
-        closeButton.contentDescription = applicationContext.getString(
-            if (preferences.recognitionMode == RecognitionMode.REALTIME) R.string.overlay_hide
-            else R.string.stop_recognition,
-        )
+        closeButton.contentDescription = applicationContext.getString(R.string.overlay_hide)
         closeButton.setOnClickListener { onClose() }
-        standbyIcon.setOnClickListener { onStartRecognition() }
         view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyAutomaticPlacement() }
         installDragHandler(statusLabel)
         installDragHandler(glyphDiagram)
-        installStandbyDragHandler()
         applyPreferences()
     }
 
     val isVisible: Boolean
-        get() = attached || standbyAttached
-
-    val isStandbyVisible: Boolean
-        get() = standbyAttached
+        get() = attached
 
     fun updateGameGeometry(geometry: OverlayGameGeometry?) {
         gameGeometry = geometry
@@ -156,15 +130,6 @@ class OverlayController(
         attached = true
     }
 
-    fun showStandby() {
-        latest = null
-        if (standbyAttached) return
-        hide()
-        applyPreferences()
-        addWindow(standbyIcon, standbyParams)
-        standbyAttached = true
-    }
-
     private fun addWindow(window: View, params: WindowManager.LayoutParams) {
         if (!preferencesRegistered) {
             preferenceStore.registerOnSharedPreferenceChangeListener(preferenceListener)
@@ -187,10 +152,6 @@ class OverlayController(
         if (attached) {
             windowManager.removeView(view)
             attached = false
-        }
-        if (standbyAttached) {
-            windowManager.removeView(standbyIcon)
-            standbyAttached = false
         }
     }
 
@@ -241,19 +202,6 @@ class OverlayController(
         }
         if (changed && attached) windowManager.updateViewLayout(view, layoutParams)
         else if (attached && secure != wasSecure) windowManager.updateViewLayout(view, layoutParams)
-        val iconSize = (48f * metrics.density).toInt()
-        val iconSizeChanged = standbyParams.width != iconSize || standbyParams.height != iconSize
-        standbyParams.width = iconSize
-        standbyParams.height = iconSize
-        standbyParams.flags = if (secure) {
-            standbyParams.flags or WindowManager.LayoutParams.FLAG_SECURE
-        } else {
-            standbyParams.flags and WindowManager.LayoutParams.FLAG_SECURE.inv()
-        }
-        constrainStandbyPosition()
-        if (standbyAttached && (iconSizeChanged || secure != wasSecure)) {
-            windowManager.updateViewLayout(standbyIcon, standbyParams)
-        }
         wasSecure = secure
     }
 
@@ -320,58 +268,6 @@ class OverlayController(
                 else -> false
             }
         }
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private fun installStandbyDragHandler() {
-        val touchSlop = ViewConfiguration.get(applicationContext).scaledTouchSlop
-        var initialX = 0
-        var initialY = 0
-        var downX = 0f
-        var downY = 0f
-        var dragging = false
-        standbyIcon.setOnTouchListener { icon, event ->
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    initialX = standbyParams.x
-                    initialY = standbyParams.y
-                    downX = event.rawX
-                    downY = event.rawY
-                    dragging = false
-                    icon.isPressed = true
-                    true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val dx = event.rawX - downX
-                    val dy = event.rawY - downY
-                    if (dx * dx + dy * dy > touchSlop * touchSlop) dragging = true
-                    if (dragging) {
-                        icon.isPressed = false
-                        standbyParams.x = initialX + dx.toInt()
-                        standbyParams.y = initialY + dy.toInt()
-                        constrainStandbyPosition()
-                        windowManager.updateViewLayout(icon, standbyParams)
-                    }
-                    true
-                }
-                MotionEvent.ACTION_UP -> {
-                    icon.isPressed = false
-                    if (!dragging) icon.performClick()
-                    true
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    icon.isPressed = false
-                    true
-                }
-                else -> false
-            }
-        }
-    }
-
-    private fun constrainStandbyPosition() {
-        val screen = screenSize()
-        standbyParams.x = standbyParams.x.coerceIn(0, (screen.width - standbyParams.width).coerceAtLeast(0))
-        standbyParams.y = standbyParams.y.coerceIn(0, (screen.height - standbyParams.height).coerceAtLeast(0))
     }
 
     private data class LatestRender(

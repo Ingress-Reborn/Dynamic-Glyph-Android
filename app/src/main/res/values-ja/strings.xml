@@ -3,7 +3,7 @@
     <!-- Machine-written; Needs Review by a native-speaking Ingress player. Not human-reviewed. -->
     <string name="app_name">Glyph Lens</string>
     <string name="home_title">Glyph Lens</string>
-    <string name="status_ready">準備完了。セッションを開始してから Ingress に切り替えてください。</string>
+    <string name="status_ready">準備完了。画面共有を許可してから Ingress に切り替えてください。</string>
     <string name="status_waiting">画面共有の許可を待っています…</string>
     <string name="status_starting">画面キャプチャを開始しています…</string>
     <string name="status_running">キャプチャ・認識中です。Ingress に切り替え、ウインドウを Glyph スロットから離してください。</string>

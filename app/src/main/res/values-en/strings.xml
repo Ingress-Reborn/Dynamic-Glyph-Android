@@ -3,7 +3,7 @@
     <!-- English source locale. -->
     <string name="app_name">Glyph Lens</string>
     <string name="home_title">Glyph Lens</string>
-    <string name="status_ready">Ready. Start a session, then switch to Ingress.</string>
+    <string name="status_ready">Ready. Grant screen-sharing permission, then switch to Ingress.</string>
     <string name="status_waiting">Waiting for screen sharing permission…</string>
     <string name="status_starting">Starting screen capture…</string>
     <string name="status_running">Capturing and recognizing. Switch to Ingress and keep the window away from the Glyph slots.</string>

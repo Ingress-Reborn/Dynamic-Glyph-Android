@@ -41,8 +41,7 @@ class OverlayControllerInstrumentedTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val automation = instrumentation.uiAutomation
-    private val starts = AtomicInteger()
-    private val stops = AtomicInteger()
+    private val closes = AtomicInteger()
     private lateinit var controller: OverlayController
     private var originalAccessibilityFlags: Int? = null
     private var originalAutoHide: Boolean? = null
@@ -61,13 +60,9 @@ class OverlayControllerInstrumentedTest {
             preferences.hidesAfterDrawing = false
             controller = OverlayController(
                 context,
-                onStartRecognition = {
-                    starts.incrementAndGet()
-                    controller.show()
-                },
                 onClose = {
-                    stops.incrementAndGet()
-                    controller.showStandby()
+                    closes.incrementAndGet()
+                    controller.hide()
                 },
             )
         }
@@ -82,60 +77,6 @@ class OverlayControllerInstrumentedTest {
         originalAccessibilityFlags?.let { previous ->
             automation.serviceInfo = automation.serviceInfo.apply { flags = previous }
         }
-    }
-
-    @Test
-    fun iconStartsPanelAndCloseReturnsToIcon() {
-        instrumentation.runOnMainSync {
-            controller.showStandby()
-            assertTrue(controller.isVisible)
-            assertTrue(controller.isStandbyVisible)
-        }
-        assertTrue(awaitNode("startRecognitionIcon").performAction(AccessibilityNodeInfo.ACTION_CLICK))
-        val close = awaitNode("closeOverlay")
-        assertEquals(1, starts.get())
-        instrumentation.runOnMainSync {
-            assertTrue(controller.isVisible)
-            assertFalse(controller.isStandbyVisible)
-        }
-        awaitUi("Standby icon remained beside the recognition panel") { node("startRecognitionIcon") == null }
-
-        assertTrue(close.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-        awaitNode("startRecognitionIcon")
-        assertEquals(1, stops.get())
-        instrumentation.runOnMainSync {
-            assertTrue(controller.isVisible)
-            assertTrue(controller.isStandbyVisible)
-            controller.hide()
-            assertFalse(controller.isVisible)
-            assertFalse(controller.isStandbyVisible)
-        }
-        awaitUi("Hide left an overlay attached") {
-            node("startRecognitionIcon") == null && node("closeOverlay") == null
-        }
-    }
-
-    @Test
-    fun draggingIconDoesNotStartAndSmallTapMovementStillStarts() {
-        instrumentation.runOnMainSync { controller.showStandby() }
-        val before = Rect().also { awaitNode("startRecognitionIcon").getBoundsInScreen(it) }
-        val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-        gesture(before.exactCenterX(), before.exactCenterY(), touchSlop * 4f)
-
-        val after = Rect()
-        awaitUi("The real icon did not move after a drag") {
-            node("startRecognitionIcon")?.getBoundsInScreen(after)
-            after.left - before.left > touchSlop
-        }
-        assertEquals("Dragging the standby icon must not start recognition", 0, starts.get())
-        instrumentation.runOnMainSync { assertTrue(controller.isStandbyVisible) }
-
-        gesture(after.exactCenterX(), after.exactCenterY(), touchSlop / 2f)
-        val close = awaitNode("closeOverlay")
-        assertEquals("A tap with small finger movement must start once", 1, starts.get())
-        assertTrue(close.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-        val restored = Rect().also { awaitNode("startRecognitionIcon").getBoundsInScreen(it) }
-        assertEquals("Returning to standby must retain the dragged icon position", after, restored)
     }
 
     @Test
@@ -224,8 +165,7 @@ class OverlayControllerInstrumentedTest {
             instrumentation.waitForIdleSync()
             assertEquals(null, node("dragHandle"))
             assertEquals(null, node("closeOverlay"))
-            assertEquals("Appearance changes must not start recognition", 0, starts.get())
-            assertEquals("Appearance changes must not stop recognition", 0, stops.get())
+            assertEquals("Appearance changes must not close the window", 0, closes.get())
 
             val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
             gesture(canvas.exactCenterX(), canvas.exactCenterY(), touchSlop * 3f)
@@ -234,8 +174,7 @@ class OverlayControllerInstrumentedTest {
                 node("glyphDiagram")?.window?.getBoundsInScreen(moved)
                 moved.left - compactWindow.left > touchSlop
             }
-            assertEquals(0, starts.get())
-            assertEquals(0, stops.get())
+            assertEquals(0, closes.get())
             saveScreenshot("auto-hide-canvas-dragged.png")
 
             instrumentation.runOnMainSync { preferences.hidesAfterDrawing = false }
@@ -244,8 +183,11 @@ class OverlayControllerInstrumentedTest {
             awaitNode("closeOverlay")
             assertEquals("Showing controls must retain the user's horizontal position", moved.left, restored.left)
             assertTrue(awaitNode("closeOverlay").performAction(AccessibilityNodeInfo.ACTION_CLICK))
-            awaitNode("startRecognitionIcon")
-            assertEquals(1, stops.get())
+            awaitUi("Closing must remove the floating window") {
+                node("glyphDiagram") == null && node("closeOverlay") == null
+            }
+            assertEquals(1, closes.get())
+            instrumentation.runOnMainSync { assertFalse(controller.isVisible) }
         } finally {
             instrumentation.runOnMainSync {
                 controller.hide()

@@ -9,6 +9,7 @@ import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.ParcelFileDescriptor;
@@ -52,55 +53,30 @@ public final class ReleaseUiCaptureInstrumentedTest {
     }
 
     @Test
-    public void fiveGlyphReleaseJourneyProducesVisualEvidence() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, false, false, false);
+    public void openingAppStartsFiveGlyphRecognitionWithDefaultMapHiding() throws Throwable {
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, false, false);
     }
 
     @Test
     public void threeGlyphReleaseJourneyProducesVisualEvidence() throws Throwable {
-        verifyJourney("real-recording-093906.mp4", new String[] {"nourish", "xm", "portal"}, false, false, false, false);
+        verifyJourney("real-recording-093906.mp4", new String[] {"nourish", "xm", "portal"}, false, false, false);
     }
 
     @Test
-    public void powerSavingReleaseJourneyStartsAndResumesFromIcon() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, false, false, false);
+    public void hiddenReleaseJourneyRevealsPredictionsAndRestoresFromNotification() throws Throwable {
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, true, false);
     }
 
     @Test
-    public void autoHideReleaseJourneyHidesOnMapIconsAndContinues() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, true, false, false);
+    public void mapIconsWorkWithoutTitles() throws Throwable {
+        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, false, true);
     }
 
-    @Test
-    public void powerSavingAutoHideReleaseJourneyContinuesAfterMapIcons() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, true, false, false);
-    }
-
-    @Test
-    public void realtimeHiddenReleaseJourneyRevealsPredictionsAndRestoresFromNotification() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, false, true, false);
-    }
-
-    @Test
-    public void realtimeMapIconsWorkWithoutTitles() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, false, true, false, true);
-    }
-
-    @Test
-    public void powerSavingMapIconsWorkWithoutTitles() throws Throwable {
-        verifyJourney("real-recording.mp4", new String[] {"question", "less", "forget", "all", "lie"}, true, true, false, true);
-    }
-
-    @Test
-    public void powerSavingThreeGlyphReleaseJourneyHidesOnMapIconsAndContinues() throws Throwable {
-        verifyJourney("real-recording-124013.mp4", new String[] {"advance", "human", "enlightenment"}, true, true, false, false);
-    }
-
-    private void verifyJourney(String fileName, String[] expectedSequence, boolean powerSaving,
+    private void verifyJourney(String fileName, String[] expectedSequence,
             boolean autoHide, boolean hiddenJourney, boolean hideHeaderText) throws Throwable {
         File source = new File(context.getExternalFilesDir(null), fileName);
         File output = new File(context.getExternalFilesDir(null), "live-release-tests/"
-                + fileName.replace(".mp4", "") + (powerSaving ? "-power-saving" : "-realtime")
+                + fileName.replace(".mp4", "") + "-auto-start"
                 + (autoHide ? "-auto-hide" : "")
                 + (hiddenJourney ? "-hidden" : "")
                 + (hideHeaderText ? "-masked-title" : "")
@@ -111,11 +87,14 @@ public final class ReleaseUiCaptureInstrumentedTest {
         report.put("expectedSequenceForManualReview", new JSONArray(Arrays.asList(expectedSequence)));
         report.put("glyphVerification", "Manual review of screenshots required; no per-Glyph assertion");
         report.put("performanceMeasurement", "Not measured: periodic screenshots affect CPU usage");
-        report.put("recognitionMode", powerSaving ? "powerSaving" : "realtime");
         report.put("hidesAfterDrawing", autoHide);
-        report.put("startsWithHiddenWindow", !powerSaving || autoHide);
         report.put("playerProcess", instrumentation.getContext().getPackageName() + ":fixture_video");
         report.put("headerTextMasked", hideHeaderText);
+        SharedPreferences preferences = context.getSharedPreferences("glyph-lens", Context.MODE_PRIVATE);
+        Boolean previousFloatingWindow = preferences.contains("display.floatingWindow")
+                ? preferences.getBoolean("display.floatingWindow", true) : null;
+        Boolean previousAutoHide = preferences.contains("display.hidesAfterDrawing")
+                ? preferences.getBoolean("display.hidesAfterDrawing", true) : null;
         AccessibilityServiceInfo serviceInfo = automation.getServiceInfo();
         int previousFlags = serviceInfo.flags;
         serviceInfo.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -123,68 +102,58 @@ public final class ReleaseUiCaptureInstrumentedTest {
         automation.setServiceInfo(serviceInfo);
         boolean requestedCapture = false;
         boolean playerStarted = false;
-        Boolean previousFloatingWindow = null;
-        Boolean previousPowerSaving = null;
-        Boolean previousAutoHide = null;
         try {
             File playbackSource = fixtureForPlayer(source);
             assertTrue("Grant display-over-other-apps before this test", Settings.canDrawOverlays(context));
-            launchHome();
-            AccessibilityNodeInfo primary = awaitNode("primaryButton", 15_000);
-            assertEquals("Capture must be stopped before the UI journey", appString("start_capture"), text(primary));
-            previousPowerSaving = awaitNode("powerSavingModeButton", 5_000).isChecked();
-            previousAutoHide = awaitNode("autoHideSwitch", 5_000).isChecked();
-            // Both optional modes lock the floating switch on; unlock it before reading or restoring it.
-            selectAutoHide(false);
-            selectMode(false);
-            AccessibilityNodeInfo floatingSwitch = awaitNode("floatingWindowSwitch", 5_000);
-            previousFloatingWindow = floatingSwitch.isChecked();
-            if (!floatingSwitch.isChecked()) click(floatingSwitch);
-            selectMode(powerSaving);
-            selectAutoHide(autoHide);
-            saveScreenshot(new File(output, "home-mode.png"));
-            report.put("homeModeScreenshot", "home-mode.png");
+            assertTrue("Cannot restore default overlay settings for this journey", preferences.edit()
+                    .remove("display.floatingWindow").remove("display.hidesAfterDrawing").commit());
             requestedCapture = true;
-            click(awaitNode("primaryButton", 5_000));
+            context.startActivity(new Intent().setClassName(context.getPackageName(), "org.szres.glyphlens.ui.MainActivity")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
             grantWholeScreenProjection();
             report.put("systemConsentApprovals", 1);
-            awaitButtonText(appString(powerSaving ? "stop_sharing" : "stop_capture"), 15_000);
-            if (!powerSaving) {
-                JSONObject hidden = new JSONObject();
-                report.put("beforePlaybackHidden", hidden);
-                observeHidden(output, "before-playback-hidden", hidden);
-            }
+            report.put("startedWithoutStartButton", true);
+            awaitButtonText(appString("stop_capture"), 15_000);
+            assertTrue("The home page must not contain recognition mode or overlay settings",
+                    findAppNode("recognitionModeGroup") == null && findAppNode("floatingWindowSwitch") == null
+                            && findAppNode("autoHideSwitch") == null);
+            click(awaitNode("settingsButton", 5_000));
+            assertTrue("Floating window must default to enabled", awaitNode("floatingWindowSwitch", 5_000).isChecked());
+            assertTrue("Map hiding must default to enabled", awaitNode("autoHideSwitch", 5_000).isChecked());
+            report.put("defaultFloatingWindowEnabled", true);
+            report.put("defaultMapHidingEnabled", true);
+            saveScreenshot(new File(output, "settings-defaults.png"));
+            click(awaitNode("floatingWindowSwitch", 5_000));
+            awaitCheckedState("floatingWindowSwitch", false);
+            assertTrue("Disabling the floating window must preserve map hiding",
+                    awaitNode("autoHideSwitch", 5_000).isChecked());
+            selectAutoHide(false);
+            assertTrue("Disabling map hiding must not enable the floating window",
+                    !awaitNode("floatingWindowSwitch", 5_000).isChecked());
+            selectAutoHide(true);
+            assertTrue("Enabling map hiding must not enable the floating window",
+                    !awaitNode("floatingWindowSwitch", 5_000).isChecked());
+            awaitNoFloatingSurface();
+            report.put("overlaySettingsIndependent", true);
+            click(awaitNode("floatingWindowSwitch", 5_000));
+            awaitCheckedState("floatingWindowSwitch", true);
+            awaitNode("glyphDiagram", 5_000);
+            report.put("floatingSettingAppliesDuringCapture", true);
+            if (!autoHide) selectAutoHide(false);
+            automation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
+            awaitButtonText(appString("stop_capture"), 5_000);
+            assertNoProjectionConsent();
+            AccessibilityNodeInfo overlayToggle = awaitNode("overlayButton", 5_000);
+            if (appString("hide_overlay").equals(text(overlayToggle))) click(overlayToggle);
+            saveScreenshot(new File(output, "home-auto-start.png"));
+            report.put("homeScreenshot", "home-auto-start.png");
+            JSONObject hidden = new JSONObject();
+            report.put("beforePlaybackHidden", hidden);
+            observeHidden(output, "before-playback-hidden", hidden);
             playerStarted = true;
             playFixture(playbackSource, hideHeaderText);
-            if (powerSaving) {
-                JSONObject standby = new JSONObject();
-                report.put("initialStandby", standby);
-                observeStandby(output, "initial-standby", standby);
-                click(awaitNode("startRecognitionIcon", 5_000));
-                if (autoHide) awaitNoFloatingSurface();
-                else awaitRecognitionPanel();
-                playFixture(playbackSource, hideHeaderText);
-            }
             if (autoHide) observeMapHideCycle(output, report, fileName);
-            else observePhases(output, report, !powerSaving);
-            if (powerSaving && !autoHide) {
-                click(awaitNode("closeOverlay", 5_000));
-                JSONObject standby = new JSONObject();
-                report.put("afterClose", standby);
-                observeStandby(output, "after-close", standby);
-                click(awaitNode("startRecognitionIcon", 5_000));
-                awaitNode("dragHandle", 10_000);
-                assertNoProjectionConsent();
-                playFixture(playbackSource, hideHeaderText);
-                File resumedOutput = new File(output, "resumed");
-                assertTrue("Cannot create resumed visual evidence directory", resumedOutput.mkdirs());
-                JSONObject resumed = new JSONObject();
-                resumed.put("screenshotDirectory", "resumed");
-                resumed.put("glyphVerification", "Manual review of screenshots required; no per-Glyph assertion");
-                report.put("resumedJourney", resumed);
-                observePhases(resumedOutput, resumed, false);
-                report.put("resumedWithoutAnotherConsent", true);
-            }
+            else observePhases(output, report, true);
             if (autoHide) {
                 assertNoProjectionConsent();
                 playFixture(playbackSource, hideHeaderText);
@@ -197,15 +166,15 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 observeMapHideCycle(nextOutput, next, fileName);
                 report.put("nextRoundShownAndHiddenWithoutRestartOrConsent", true);
                 showFromNotification(output, "map-notification", report);
-                JSONObject hidden = new JSONObject();
-                report.put("mapStillHidesAfterNotification", hidden);
-                observeMapHideAfterNotification(output, "map-after-notification", hidden);
+                JSONObject mapHidden = new JSONObject();
+                report.put("mapStillHidesAfterNotification", mapHidden);
+                observeMapHideAfterNotification(output, "map-after-notification", mapHidden);
             }
             if (hiddenJourney) {
                 click(awaitNode("closeOverlay", 5_000));
-                JSONObject hidden = new JSONObject();
-                report.put("firstRoundDismissed", hidden);
-                observeHidden(output, "first-round-dismissed", hidden);
+                JSONObject dismissed = new JSONObject();
+                report.put("firstRoundDismissed", dismissed);
+                observeHidden(output, "first-round-dismissed", dismissed);
                 playFixture(playbackSource, hideHeaderText);
                 File nextOutput = new File(output, "next-round");
                 assertTrue("Cannot create next-round evidence directory", nextOutput.mkdirs());
@@ -224,8 +193,10 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 saveScreenshot(new File(output, "restored-live-result.png"));
             }
             stopSharing();
-            assertTrue("Full stop must remove both floating controls",
-                    findAppNode("glyphDiagram") == null && findAppNode("startRecognitionIcon") == null);
+            requestedCapture = false;
+            assertNoProjectionConsent();
+            assertTrue("Full stop must remove the floating controls",
+                    findAppNode("glyphDiagram") == null && findAppNode("closeOverlay") == null);
             report.put("fullStopVerified", true);
             report.put("status", "ui_checks_passed_manual_screenshot_review_required");
         } catch (Throwable failure) {
@@ -248,20 +219,13 @@ public final class ReleaseUiCaptureInstrumentedTest {
                                 .setAction(STOP_PLAYER).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                                         | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
                     }
-                    if (requestedCapture) {
-                        stopSharing();
-                    }
-                    if (previousPowerSaving != null) {
-                        launchHome();
-                        if (previousAutoHide != null) selectAutoHide(false);
-                        selectMode(false);
-                    }
-                    if (previousFloatingWindow != null) {
-                        AccessibilityNodeInfo floatingSwitch = awaitNode("floatingWindowSwitch", 5_000);
-                        if (floatingSwitch.isChecked() != previousFloatingWindow) click(floatingSwitch);
-                    }
-                    if (previousAutoHide != null) selectAutoHide(previousAutoHide);
-                    if (previousPowerSaving != null) selectMode(previousPowerSaving);
+                    if (requestedCapture) stopSharing();
+                    SharedPreferences.Editor restore = preferences.edit();
+                    if (previousFloatingWindow == null) restore.remove("display.floatingWindow");
+                    else restore.putBoolean("display.floatingWindow", previousFloatingWindow);
+                    if (previousAutoHide == null) restore.remove("display.hidesAfterDrawing");
+                    else restore.putBoolean("display.hidesAfterDrawing", previousAutoHide);
+                    assertTrue("Cannot restore previous overlay settings", restore.commit());
                 } finally {
                     serviceInfo.flags = previousFlags;
                     automation.setServiceInfo(serviceInfo);
@@ -287,13 +251,6 @@ public final class ReleaseUiCaptureInstrumentedTest {
         throw new AssertionError("The fixture video window did not become visible: " + source.getName());
     }
 
-    private void selectMode(boolean powerSaving) {
-        String id = powerSaving ? "powerSavingModeButton" : "realtimeModeButton";
-        AccessibilityNodeInfo mode = awaitNode(id, 5_000);
-        if (!mode.isChecked()) click(mode);
-        awaitCheckedState(id, true);
-    }
-
     private void selectAutoHide(boolean autoHide) {
         AccessibilityNodeInfo control = awaitNode("autoHideSwitch", 5_000);
         if (control.isChecked() != autoHide) click(control);
@@ -313,7 +270,6 @@ public final class ReleaseUiCaptureInstrumentedTest {
     private void awaitRecognitionPanel() {
         awaitNode("glyphDiagram", 10_000);
         awaitNode("dragHandle", 5_000);
-        assertTrue("An active panel must not retain the standby icon", findAppNode("startRecognitionIcon") == null);
         assertNoProjectionConsent();
     }
 
@@ -322,27 +278,6 @@ public final class ReleaseUiCaptureInstrumentedTest {
         AccessibilityNodeInfo primary = awaitNode("primaryButton", 10_000);
         if (!appString("start_capture").equals(text(primary))) click(primary);
         awaitButtonText(appString("start_capture"), 15_000);
-    }
-
-    private void observeStandby(File output, String name, JSONObject report) throws Exception {
-        awaitNode("startRecognitionIcon", 5_000);
-        long started = SystemClock.elapsedRealtime();
-        while (SystemClock.elapsedRealtime() - started < 3_000) {
-            assertNoProjectionConsent();
-            AccessibilityNodeInfo icon = findAppNode("startRecognitionIcon");
-            assertTrue("The standby icon must remain visible while the movie plays", icon != null && icon.isVisibleToUser());
-            assertTrue("Standby must not display the recognition panel",
-                    findAppNode("glyphDiagram") == null && findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null);
-            SystemClock.sleep(100);
-        }
-        assertNotNull("The standby icon must remain available", findAppNode("startRecognitionIcon"));
-        assertTrue("Standby must keep the recognition panel closed",
-                findAppNode("glyphDiagram") == null && findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null);
-        saveScreenshot(new File(output, name + ".png"));
-        report.put("observedMillis", SystemClock.elapsedRealtime() - started);
-        report.put("standbyIconVisible", true);
-        report.put("recognitionPanelAbsent", true);
-        report.put("screenshot", name + ".png");
     }
 
     private void observeHidden(File output, String name, JSONObject report) throws Exception {
@@ -354,15 +289,13 @@ public final class ReleaseUiCaptureInstrumentedTest {
         long started = SystemClock.elapsedRealtime();
         while (SystemClock.elapsedRealtime() - started < durationMillis) {
             assertNoProjectionConsent();
-            assertTrue("A dismissed realtime window must remain completely hidden in the same round",
-                    findAppNode("glyphDiagram") == null && findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null
-                            && findAppNode("startRecognitionIcon") == null);
+            assertTrue("A dismissed window must remain completely hidden in the same round",
+                    findAppNode("glyphDiagram") == null && findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null);
             SystemClock.sleep(100);
         }
         saveScreenshot(new File(output, name + ".png"));
         report.put("observedMillis", SystemClock.elapsedRealtime() - started);
         report.put("recognitionPanelAbsent", true);
-        report.put("standbyIconAbsent", true);
         report.put("screenshot", name + ".png");
     }
 
@@ -373,7 +306,7 @@ public final class ReleaseUiCaptureInstrumentedTest {
         while (SystemClock.elapsedRealtime() - started < 5_000) {
             assertNoProjectionConsent();
             boolean hidden = findAppNode("glyphDiagram") == null && findAppNode("dragHandle") == null
-                    && findAppNode("closeOverlay") == null && findAppNode("startRecognitionIcon") == null;
+                    && findAppNode("closeOverlay") == null;
             long now = SystemClock.elapsedRealtime();
             if (hidden) {
                 if (hiddenSince < 0) hiddenSince = now;
@@ -383,7 +316,6 @@ public final class ReleaseUiCaptureInstrumentedTest {
                     report.put("stableHiddenMillis", now - hiddenSince);
                     report.put("visibilityResets", visibilityResets);
                     report.put("recognitionPanelAbsent", true);
-                    report.put("standbyIconAbsent", true);
                     report.put("screenshot", name + ".png");
                     return;
                 }
@@ -400,10 +332,10 @@ public final class ReleaseUiCaptureInstrumentedTest {
         long deadline = SystemClock.elapsedRealtime() + 5_000;
         while (SystemClock.elapsedRealtime() < deadline) {
             if (findAppNode("glyphDiagram") == null && findAppNode("dragHandle") == null
-                    && findAppNode("closeOverlay") == null && findAppNode("startRecognitionIcon") == null) return;
+                    && findAppNode("closeOverlay") == null) return;
             SystemClock.sleep(50);
         }
-        throw new AssertionError("The floating panel and standby icon did not disappear");
+        throw new AssertionError("The floating panel did not disappear");
     }
 
     private void showFromNotification(File output, String name, JSONObject report) throws Exception {
@@ -550,8 +482,6 @@ public final class ReleaseUiCaptureInstrumentedTest {
                 if (expectsAutomaticReveal && previousStatus == null) {
                     assertTrue("The hidden window must first reappear during sequence presentation",
                             status.startsWith("Watching the sequence"));
-                    assertTrue("Automatic reveal must not create a standby icon",
-                            findAppNode("startRecognitionIcon") == null);
                     report.put("automaticRevealElapsedMillis", now - startedAt);
                     saveScreenshot(new File(output, "automatic-reveal.png"));
                 }
@@ -608,7 +538,6 @@ public final class ReleaseUiCaptureInstrumentedTest {
             boolean visible = diagram != null && diagram.isVisibleToUser();
             assertTrue("Automatic hiding must remove the title and X control row",
                     findAppNode("dragHandle") == null && findAppNode("closeOverlay") == null);
-            assertTrue("Automatic recognition must not leave a floating icon", findAppNode("startRecognitionIcon") == null);
             if (visible) {
                 if (firstVisibleAt < 0) {
                     firstVisibleAt = now;

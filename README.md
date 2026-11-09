@@ -1,65 +1,44 @@
 # Glyph Lens — Android
 
-Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android 应用。**0.4.3 将全流程改为纯特征识别，移除全部 OCR、ML Kit、四类模型和游戏语言设置。** 阶段由槽位高亮变迁、点阵和输入计时条驱动；保留 Glyph 识别与序列预测、实时/省电模式及可选地图自动隐藏。
+Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android 应用。**0.4.4 删除省电模式和待命悬浮图标，打开 App 完成必要系统授权后直接开始识别。** 全流程纯特征识别、预测和自适应节流保持，不包含 OCR 或语言设置。
 
-当前实现与增量验收见 [FEATURE_ONLY.md](Docs/FEATURE_ONLY.md)，用户八条规则见 [Plan.md](Plan.md)。生产源码 `6fea790` 的 **11 项重点 JVM 测试、2 项正式 APK 双轮流程和 10 张关键截图人工核对通过**。本地 APK 仅 **417,845 bytes（约 0.418MB）**，比 0.4.2 小 **97.36%**。本轮没有重跑无关全套、做 CPU 对照或上传/下载 APK 验 SHA；0.4.2 记录继续保留为历史。
+本轮行为与增量验收见 [AUTO_START.md](Docs/AUTO_START.md)，用户八条规则见 [Plan.md](Plan.md)。当前 0.4.4 测试、本地产物与发布待执行；只验证启动、设置、去待命的变化及一项正式五图两轮，不复做未改变算法的测试或 CPU 对比。
 
-## 当前行为
+## 使用与设置
 
-- 阶段判断只使用槽位高亮及变化、点阵和输入计时条，不读取标题文字，不需要游戏语言配置。
-- 11 节点标定、固定形状采样和跨帧确认保持；输入期间冻结本轮序列，不把玩家笔画当作新的展示 Glyph。
-- 连续已确认前缀加唯一预测覆盖整组，或整组全部真实确认后，每轮自动显示；确认、观察和预测保持不同呈现。
-- 实时授权后自动后台识别，初始不显示图标或窗口；省电模式点击悬浮图标开始。
-- “返回地图后自动隐藏”默认关闭。开启时窗口只有可拖动画布，五个独立地图按钮任一出现即可隐藏，不代表游戏成功。
-- 地图上通知手动显示后，按钮仍可见就再次隐藏。关闭选项时实时 × 隐藏但继续识别，省电 × 停止并回图标；通知提供显示和停止。
-- 画布大小/清晰度、内置或导入 CSV 保留。去 OCR 不重写预测逻辑或表数据。
+打开 App，按系统要求完成屏幕共享等必要授权后，应用直接识别，不再选择模式或点击待命图标。共享范围继续选择**整个屏幕**；必要权限仍由用户在系统流程中授予。
 
-完成页、分数、掉落、输入正确性、历史统计、数据库、云同步、录像/音频等业务继续不在范围内。
+两项窗口开关移到设置页：
 
-## 使用与平台
+| 设置 | 默认 | 行为 |
+| --- | --- | --- |
+| 返回地图后自动隐藏 | 开启 | 识别到既有五个地图目标之一时隐藏窗口 |
+| 显示悬浮窗 | 开启 | 允许按原有结果就绪规则显示识别与预测窗口 |
 
-交付目标仍是 Android 10 / API 29 以上的 arm64、竖屏整屏共享。选择模式和自动隐藏选项后开始，授权悬浮窗并选择**共享整个屏幕**。实时模式立即识别，省电点击图标后开始；模式与自动隐藏选项在完全停止共享时修改。
+两个开关独立。关闭“显示悬浮窗”后，自动隐藏不会将它重新打开，识别可以继续在后台进行。默认值只用于没有保存过该项设置的用户；已有明确保存的 true/false 保留，不强行覆盖。
 
-阶段识别不再需要选择游戏语言。下一轮由新的槽位与点阵展示特征恢复，自动隐藏不重建采集会话或重复请求授权。应用不需要 root、无障碍服务或麦克风。
+省电模式及其待命悬浮图标删除。通知与明确停止沿用现有控制，停止结束当前共享；CSV、画布与既有结果呈现保持。本轮不修改纯特征阶段、五图确认、预测、地图模板或自适应节流。
 
-当前适配边界仍为竖屏整屏共享；横屏、方形、分屏和单应用共享未全面认证。去掉语言依赖不等于所有 Android 设备和游戏布局已经验证。
+## 构建与交付
 
-## 本轮构建与验证
+版本为 **0.4.4 / versionCode 8**，继续使用仓库已有 Kotlin/Views/Canvas、Gradle Wrapper 与 R8 流程。只增量检查启动、设置和去待命路径，加一项正式 APK 五图连续两轮并实际查看关键截图。
 
-0.4.3 使用 versionCode 7。现有流程中的 8 项 Tracker、1 项 SessionPipeline、2 项 GlyphCaptureEngine 测试 **11/11 通过，无跳过或失败**；一次增量构建完成 Release 和测试 APK。正式 runner 的实时遮标题五图两轮、省电新三图两轮 **2/2 通过**，本轮实际查看 10 张关键截图。五图后两项正确，确认与预测样式保持；新三图在第三项真实确认后显示，两项均回地图隐藏并彻底停止。
+不跑全仓库、重复 Debug 设备流程或 CPU 对比，不下载 APK 验 SHA，不引入仓库没在使用的工具或流程。本地包与实际结果完成后记录，验收后按既有安排推送 [原仓库 main](https://github.com/vhu231/Dynamic-Glyph-Android)、更新 Release 并同步 [目标 main](https://github.com/szres/dynamic-glyph-android)，保留目标自身历史、不 force push。
 
-ML Kit、四类模型、阶段 OCR 与专属 ProGuard 规则已移除。本地 `Glyph-Lens-0.4.3-arm64.apk` 为 **417,845 bytes**，检查无 OCR 依赖/资产及任何原生库；保留 NDK arm64 配置，没有为强制 ABI 添加空库。本轮未跑重复 Debug 设备流程、全单元、主动完整 Lint 或多尺寸矩阵；Release 自带 lintVital 随构建执行，没有额外工具或哈希下载流程。
+交付目标仍是 Android 10 / API 29 以上的 arm64、竖屏整屏共享；不要求 root、无障碍服务或麦克风。本轮不新增横屏、分屏、单应用共享或所有机型的适配结论。
 
-生产源码 `6fea790` 已进入原仓库 main，v0.4.3 标签指向该生产提交，[v0.4.3 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.3) 已发布为 Latest，[0.4.3 APK](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.3/Glyph-Lens-0.4.3-arm64.apk) 已上传。未为发布校验下载 APK 或计算 SHA；目标仓库同步沿用现有流程。
-
-0.4.2 的 CPU 36.46% 降幅属于旧版本对照。0.4.3 不复做旧 CPU 对比，也不根据删除 OCR 推算新百分比或实体手机温度/续航变化。
-
-## 已保留的 0.4.2 交付记录
-
-下列是上一已发布版本的既有结果，不是 0.4.3 验收或本轮待重复的流程。完整测试、CPU 和证据边界见 [VISUAL_COMPLETION.md](Docs/VISUAL_COMPLETION.md)。
-
-0.4.2 使用 versionCode 6。Release 继续启用 R8、仅打包 arm64，并精确保留 ML Kit 的三个实际反射构造入口。正式产物为 `app/build/outputs/apk/release/Glyph-Lens-0.4.2-arm64.apk`，**15,824,427 bytes**（约 15.82MB / 15.09MiB），比 0.4.1 增加 16,384 bytes；SHA-256 为 `e5f381a0c28b8dd15bbbfc26cd131a3365a27331c1c926998b7446193e539e27`。v3 签名、ZIP/ELF 16KiB、原始表哈希、无 INTERNET 权限及包内源码 `6fd03bc9` 已核验；同一签名包的 9 项流程、实际反射构造、完全停止和人工图形核对通过。
-
-已更新 [vhu231/Dynamic-Glyph-Android](https://github.com/vhu231/Dynamic-Glyph-Android) 的 main 并发布正式最新版 [v0.4.2 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.2)，可下载 [arm64 APK](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.2/Glyph-Lens-0.4.2-arm64.apk)。发布后重新下载的文件为 15,824,427 bytes，SHA-256 与上述受测包及发布端 digest 一致。[szres/dynamic-glyph-android](https://github.com/szres/dynamic-glyph-android) 的 main 已同步，目标保留自身旧历史，已核验两边源码树一致，未使用 force push。
-
-## 仓库与历史资料
+## 历史与工程资料
 
 | 路径 | 用途 |
 | --- | --- |
-| `app/` | Android 首页、设置、采集、悬浮窗和表导入 |
-| `recognition/` | 特征阶段追踪、Glyph 识别/预测与地图目标检测 |
-| [FEATURE_ONLY.md](Docs/FEATURE_ONLY.md) | 0.4.3 全流程特征与增量验收 |
-| [Plan.md](Plan.md) | 当前范围、八条用户规则及验收约束 |
-| [VISUAL_COMPLETION.md](Docs/VISUAL_COMPLETION.md) | 0.4.2 地图自动隐藏、CPU 与已发布结果 |
-| [REALTIME_VISIBILITY.md](Docs/REALTIME_VISIBILITY.md) | 0.4.1 原始行为、验证与发布 |
-| [CALIBRATED_VISION.md](Docs/CALIBRATED_VISION.md) | 0.4.0 固定采样与负载历史 |
-| `Tools/MapControls/` | Android 地图按钮模板生成器 |
-| [ANDROID.md](Docs/ANDROID.md) | Android 构建与增量验证 |
-| [PROVENANCE.md](Docs/PROVENANCE.md) | CSV 与测试素材来源 |
+| [AUTO_START.md](Docs/AUTO_START.md) | 当前 0.4.4 启动与设置范围、增量验收 |
+| [Plan.md](Plan.md) | 八条用户规则与本轮约束 |
+| [FEATURE_ONLY.md](Docs/FEATURE_ONLY.md) | 0.4.3 全流程去 OCR、原始验收与发布记录 |
+| [VISUAL_COMPLETION.md](Docs/VISUAL_COMPLETION.md) | 0.4.2 地图隐藏、性能及发布历史 |
+| `app/`、`recognition/` | Android 平台层与纯 Kotlin 识别核心 |
+| `Apps/`、`Packages/`、`Tools/` | 既有 iOS 参考与研发资料，不进入 Android 包 |
 
-本仓库仅维护 Android 版本，已移除 iOS/Swift 工程、Xcode 配置、旧研发脚本及私有素材子模块。源码历史仍由 Git 保留。
-
-CSV 的原始换行与内容保持。历史文档中的 OCR、模型、语言选项与测试数据按原版本理解，不覆盖本版去 OCR 范围。
+上一已发布版本为 [v0.4.3](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.3)。历史测试、APK 大小和 CPU 数字只代表原版本，不继承为 0.4.4 结果。iOS 源工程不修改。
 
 ## 许可证与来源
 

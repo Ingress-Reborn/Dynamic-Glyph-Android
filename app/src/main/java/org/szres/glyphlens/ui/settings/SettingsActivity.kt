@@ -1,13 +1,16 @@
 package org.szres.glyphlens.ui.settings
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Button
 import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import org.szres.glyphlens.R
-import org.szres.glyphlens.overlay.OverlayLeavePresenter
 import org.szres.glyphlens.settings.AppPreferences
 import org.szres.glyphlens.settings.OverlayCanvasConfiguration
 
@@ -18,6 +21,12 @@ class SettingsActivity : ComponentActivity() {
     private lateinit var heightSeek: SeekBar
     private lateinit var sharpnessSeek: SeekBar
     private lateinit var applyCanvas: Button
+    private lateinit var floatingSwitch: Switch
+
+    private val overlayPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        preferences.showsFloatingWindow = Settings.canDrawOverlays(this)
+        floatingSwitch.isChecked = preferences.showsFloatingWindow
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,16 +37,28 @@ class SettingsActivity : ComponentActivity() {
         heightSeek = findViewById(R.id.settingsCanvasHeightSeek)
         sharpnessSeek = findViewById(R.id.settingsCanvasSharpnessSeek)
         applyCanvas = findViewById(R.id.settingsApplyCanvasButton)
+        floatingSwitch = findViewById(R.id.floatingWindowSwitch)
         connectActions()
         renderCanvas()
     }
 
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        OverlayLeavePresenter.onUserLeave(this)
-    }
-
     private fun connectActions() {
+        floatingSwitch.apply {
+            isChecked = preferences.showsFloatingWindow
+            setOnCheckedChangeListener { _, checked ->
+                if (checked && !Settings.canDrawOverlays(this@SettingsActivity)) {
+                    isChecked = false
+                    overlayPermission.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")))
+                } else {
+                    preferences.showsFloatingWindow = checked
+                }
+            }
+        }
+        findViewById<Switch>(R.id.autoHideSwitch).apply {
+            isChecked = preferences.hidesAfterDrawing
+            setOnCheckedChangeListener { _, checked -> preferences.hidesAfterDrawing = checked }
+        }
         findViewById<Switch>(R.id.settingsHideCaptureSwitch).apply {
             isChecked = preferences.protectsFloatingWindowFromCapture
             setOnCheckedChangeListener { _, checked -> preferences.protectsFloatingWindowFromCapture = checked }

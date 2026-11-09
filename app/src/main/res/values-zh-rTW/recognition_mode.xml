@@ -1,19 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="recognition_mode_title">識別模式</string>
-    <string name="recognition_mode_realtime">即時</string>
-    <string name="recognition_mode_power_saving">省電</string>
-    <string name="recognition_mode_realtime_hint">授權螢幕分享後，在背景自動識別，整組識別或唯一預測就緒後顯示視窗，每輪一次。點選 × 完全隱藏視窗並繼續識別，也可從通知列顯示浮動視窗。</string>
-    <string name="recognition_mode_power_saving_hint">授權螢幕分享後，點選浮動圖示開始識別。未開啟自動隱藏時，點選 × 停止識別並回到圖示。待命時不處理畫面和文字，系統螢幕分享授權仍保持。</string>
-    <string name="status_standby">待命中。點選浮動圖示開始識別。</string>
-    <string name="status_standby_hidden">待命中。浮動圖示已隱藏，可在首頁恢復顯示。</string>
-    <string name="stop_sharing">停止螢幕分享</string>
-    <string name="home_live_standby">識別已停止。準備好後，點選浮動圖示開始。</string>
-    <string name="notification_standby_text">螢幕分享授權保持中。點選浮動圖示開始識別；使用本通知或應用程式中的停止按鈕結束分享。</string>
-    <string name="notification_standby_title">Glyph Lens 正在待命</string>
+    <string name="automatic_recognition_hint">開啟應用程式並授權螢幕分享後自動識別，結果就緒後自動顯示。浮動視窗和返回地圖後自動隱藏可在設定中調整。</string>
     <string name="status_running_hidden">視窗已隱藏，背景繼續識別。完整結果就緒後每輪自動顯示一次，也可從通知列顯示浮動視窗。</string>
     <string name="notification_show_overlay">顯示浮動視窗</string>
-    <string name="notification_realtime_hidden_text">視窗已隱藏，識別繼續執行。結果就緒後每輪自動顯示一次，也可點選顯示浮動視窗。</string>
+    <string name="notification_hidden_text">視窗已隱藏，識別繼續執行。結果就緒後每輪自動顯示一次，也可點選顯示浮動視窗。</string>
     <string name="overlay_hide">隱藏浮動視窗</string>
     <string name="auto_hide_after_drawing">返回地圖後自動隱藏</string>
     <string name="auto_hide_after_drawing_hint">偵測到主地圖上的任一按鈕時隱藏視窗，背景繼續識別。開啟後只保留可拖曳的 Glyph 畫布，可從通知列停止識別。</string>

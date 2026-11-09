@@ -14,8 +14,8 @@ android {
         applicationId = "org.szres.glyphlens"
         minSdk = 29
         targetSdk = 37
-        versionCode = 7
-        versionName = "0.4.3"
+        versionCode = 8
+        versionName = "0.4.4"
         testInstrumentationRunner = providers.gradleProperty("glyphTestRunner")
             .orElse("androidx.test.runner.AndroidJUnitRunner").get()
         ndk {

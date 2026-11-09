@@ -17,19 +17,14 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.view.View
 import android.widget.Button
-import android.widget.RadioButton
-import android.widget.RadioGroup
-import android.widget.Switch
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import org.szres.glyphlens.R
 import org.szres.glyphlens.capture.CaptureService
-import org.szres.glyphlens.overlay.OverlayLeavePresenter
 import org.szres.glyphlens.overlay.OverlayPreviewView
 import org.szres.glyphlens.settings.AppPreferences
-import org.szres.glyphlens.settings.RecognitionMode
 import org.szres.glyphlens.tables.TableController
 import org.szres.glyphlens.ui.settings.SettingsActivity
 
@@ -39,9 +34,6 @@ class MainActivity : ComponentActivity() {
     private lateinit var primaryButton: Button
     private lateinit var overlayButton: Button
     private lateinit var statusText: TextView
-    private lateinit var floatingSwitch: Switch
-    private lateinit var autoHideSwitch: Switch
-    private lateinit var recognitionModeGroup: RadioGroup
     private lateinit var liveStatus: TextView
     private lateinit var livePreview: OverlayPreviewView
     private var awaitingStart = false
@@ -93,7 +85,6 @@ class MainActivity : ComponentActivity() {
     private val captureReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (CaptureService.currentState == CaptureService.SessionState.RUNNING ||
-                CaptureService.currentState == CaptureService.SessionState.STANDBY ||
                 CaptureService.currentState == CaptureService.SessionState.STOPPED
             ) awaitingStart = false
             lastMessage = intent.getStringExtra(CaptureService.EXTRA_MESSAGE)
@@ -114,9 +105,6 @@ class MainActivity : ComponentActivity() {
         primaryButton = findViewById(R.id.primaryButton)
         overlayButton = findViewById(R.id.overlayButton)
         statusText = findViewById(R.id.statusText)
-        floatingSwitch = findViewById(R.id.floatingWindowSwitch)
-        autoHideSwitch = findViewById(R.id.autoHideSwitch)
-        recognitionModeGroup = findViewById(R.id.recognitionModeGroup)
         liveStatus = findViewById(R.id.homeLiveStatus)
         livePreview = findViewById(R.id.homeLivePreview)
         livePreview.statusView.visibility = View.GONE
@@ -127,8 +115,7 @@ class MainActivity : ComponentActivity() {
                     lastMessage = null
                     render()
                 } else startCapture()
-                CaptureService.SessionState.STARTING, CaptureService.SessionState.RUNNING,
-                CaptureService.SessionState.STANDBY ->
+                CaptureService.SessionState.STARTING, CaptureService.SessionState.RUNNING ->
                     sendServiceAction(CaptureService.ACTION_STOP)
                 CaptureService.SessionState.STOPPING -> Unit
             }
@@ -143,35 +130,12 @@ class MainActivity : ComponentActivity() {
         findViewById<Button>(R.id.settingsButton).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-        floatingSwitch.isChecked = preferences.showsFloatingWindow
-        floatingSwitch.setOnCheckedChangeListener { _, checked -> preferences.showsFloatingWindow = checked }
-        autoHideSwitch.isChecked = preferences.hidesAfterDrawing
-        autoHideSwitch.setOnCheckedChangeListener { _, checked ->
-            preferences.hidesAfterDrawing = checked
-            if (checked) preferences.showsFloatingWindow = true
-            floatingSwitch.isChecked = preferences.showsFloatingWindow
-            render()
-        }
-        recognitionModeGroup.check(
-            if (preferences.recognitionMode == RecognitionMode.REALTIME) R.id.realtimeModeButton
-            else R.id.powerSavingModeButton,
-        )
-        recognitionModeGroup.setOnCheckedChangeListener { _, checkedId ->
-            preferences.recognitionMode = when (checkedId) {
-                R.id.realtimeModeButton -> RecognitionMode.REALTIME
-                R.id.powerSavingModeButton -> RecognitionMode.POWER_SAVING
-                else -> return@setOnCheckedChangeListener
-            }
-            if (preferences.recognitionMode == RecognitionMode.POWER_SAVING || preferences.hidesAfterDrawing) {
-                preferences.showsFloatingWindow = true
-            }
-            floatingSwitch.isChecked = preferences.showsFloatingWindow
-            lastMessage = null
-            render()
-        }
         findViewById<Button>(R.id.importShapesButton).setOnClickListener { shapePicker.launch(arrayOf("*/*")) }
         findViewById<Button>(R.id.importSequencesButton).setOnClickListener { sequencePicker.launch(arrayOf("*/*")) }
         render()
+        if (savedInstanceState == null && CaptureService.currentState == CaptureService.SessionState.STOPPED &&
+            tables.assistsGlyphs
+        ) startCapture()
     }
 
     override fun onStart() {
@@ -185,8 +149,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         resumed = true
-        floatingSwitch.isChecked = preferences.showsFloatingWindow
-        autoHideSwitch.isChecked = preferences.hidesAfterDrawing
         if (CaptureService.currentState != CaptureService.SessionState.STOPPED) lastMessage = null
         render()
         mainHandler.post(liveTick)
@@ -196,11 +158,6 @@ class MainActivity : ComponentActivity() {
         resumed = false
         mainHandler.removeCallbacks(liveTick)
         super.onPause()
-    }
-
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        OverlayLeavePresenter.onUserLeave(this)
     }
 
     override fun onStop() {
@@ -214,10 +171,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startCapture() {
-        if (preferences.recognitionMode == RecognitionMode.POWER_SAVING || preferences.hidesAfterDrawing) {
-            preferences.showsFloatingWindow = true
-            floatingSwitch.isChecked = true
-        }
         awaitingStart = true
         lastMessage = null
         render()
@@ -256,7 +209,6 @@ class MainActivity : ComponentActivity() {
             render()
             return
         }
-        OverlayLeavePresenter.onUserLeave(this)
         try {
             startActivity(intent)
         } catch (_: ActivityNotFoundException) {
@@ -271,38 +223,22 @@ class MainActivity : ComponentActivity() {
             (tables.assistsGlyphs || state != CaptureService.SessionState.STOPPED)
         primaryButton.setText(when {
             state == CaptureService.SessionState.RUNNING -> R.string.stop_capture
-            state == CaptureService.SessionState.STANDBY -> R.string.stop_sharing
             state == CaptureService.SessionState.STARTING || awaitingStart -> R.string.cancel_capture
             state == CaptureService.SessionState.STOPPING -> R.string.stopping_capture
             else -> R.string.start_capture
         })
-        overlayButton.visibility = if ((state == CaptureService.SessionState.RUNNING ||
-                state == CaptureService.SessionState.STANDBY) &&
-            preferences.showsFloatingWindow) {
+        overlayButton.visibility = if (state == CaptureService.SessionState.RUNNING && preferences.showsFloatingWindow) {
             View.VISIBLE
         } else View.GONE
         overlayButton.setText(if (CaptureService.isOverlayVisible) R.string.hide_overlay else R.string.show_overlay)
-        floatingSwitch.isEnabled = canChooseTables && preferences.recognitionMode == RecognitionMode.REALTIME &&
-            !preferences.hidesAfterDrawing
-        autoHideSwitch.isEnabled = canChooseTables
-        findViewById<RadioButton>(R.id.realtimeModeButton).isEnabled = canChooseTables
-        findViewById<RadioButton>(R.id.powerSavingModeButton).isEnabled = canChooseTables
-        findViewById<TextView>(R.id.recognitionModeHint).setText(
-            if (preferences.recognitionMode == RecognitionMode.REALTIME) R.string.recognition_mode_realtime_hint
-            else R.string.recognition_mode_power_saving_hint,
-        )
         val hiddenStatus = when {
             state == CaptureService.SessionState.RUNNING && !CaptureService.isOverlayVisible &&
-                preferences.showsFloatingWindow && (preferences.recognitionMode == RecognitionMode.REALTIME ||
-                    preferences.hidesAfterDrawing) ->
+                preferences.showsFloatingWindow ->
                 R.string.status_running_hidden
-            state == CaptureService.SessionState.STANDBY && !CaptureService.isOverlayVisible ->
-                R.string.status_standby_hidden
             else -> null
         }
         statusText.text = hiddenStatus?.let(::getString) ?: lastMessage ?: getString(when {
             state == CaptureService.SessionState.RUNNING -> R.string.status_running
-            state == CaptureService.SessionState.STANDBY -> R.string.status_standby
             state == CaptureService.SessionState.STARTING -> R.string.status_starting
             state == CaptureService.SessionState.STOPPING -> R.string.status_stopping
             awaitingStart -> R.string.status_waiting
@@ -316,11 +252,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun renderLiveSnapshot() {
-        if (CaptureService.currentState == CaptureService.SessionState.STANDBY) {
-            liveStatus.setText(R.string.home_live_standby)
-            livePreview.visibility = View.GONE
-            return
-        }
         val snapshot = CaptureService.latestSnapshot
         if (snapshot == null) {
             liveStatus.setText(R.string.home_live_waiting)
