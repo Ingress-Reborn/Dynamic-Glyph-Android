@@ -78,3 +78,11 @@ iOS 使用系统 Vision，Android 当前选择将离线 OCR 模型随包携带�
 [精简前迁移计划](Docs/HISTORY/PLAN_BEFORE_GLYPH_ONLY_2026-11-09.md)、[早期 Glyph 验收](Docs/GLYPH_PREDICTION.md)和[比例适配记录](Docs/ANDROID_ADAPTATION.md)均为历史资料。早期文档中的完整迁移、Room/Drive、录制、小米岛及 250ms OCR 说明不是当前产品范围或策略。旧矩阵测试与 CPU 数据对应各自旧包，不作为新版本结论。
 
 生产源码 `e0c8f9d` 已合入 [main](https://github.com/vhu231/Dynamic-Glyph-Android/tree/main)，[v0.4.1 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.1) 已发布为 Latest，附 [arm64 APK](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.1/Glyph-Lens-0.4.1-arm64.apk) 和校验文件。上传后重新下载的 APK 与受测文件哈希一致。新增的 [szres/dynamic-glyph-android](https://github.com/szres/dynamic-glyph-android) 按用户最新要求暂不操作。
+
+## 许可证与来源
+
+本仓库代码是 **source-available（源码可读）**，使用 [PolyForm Noncommercial License 1.0.0](LICENSE)。许可证原文及其中的 `Required Notice:` 保持不变；具体使用、修改和分发条件以许可证为准。
+
+原项目名称与图标、第三方游戏素材及商标的说明见 [NOTICE.md](NOTICE.md)，贡献约定见 [CONTRIBUTING.md](CONTRIBUTING.md)。Android 工作名称为 Glyph Lens，不改变原代码版权和许可条件。
+
+部分真实截图、录屏和参考测试输入未随仓库分发。缺少这些素材的测试需明确标为跳过，不能算作识别通过；原输入来源记录见 [测试素材说明](Packages/GlyphRecognition/Tests/GlyphRecognitionTests/Fixtures/PROVENANCE.md)。
