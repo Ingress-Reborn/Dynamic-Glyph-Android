@@ -51,6 +51,15 @@ class GlyphOverlayWindow(private val context: Context) {
     private var params: WindowManager.LayoutParams? = null
     private var showing = false
 
+    /** A message to display before the first snapshot arrives. Set from any thread. */
+    @Volatile
+    private var pendingStatus: String? = null
+
+    /** Why the window could not be added, if it failed. Readable from the service. */
+    @Volatile
+    var lastError: String? = null
+        private set
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
         override fun run() {
@@ -85,17 +94,30 @@ class GlyphOverlayWindow(private val context: Context) {
         }
 
         val view = GlyphPanelView(context, density)
+        view.statusText = pendingStatus
         view.setOnTouchListener(DragListener(layoutParams))
 
         try {
             windowManager.addView(view, layoutParams)
         } catch (e: Exception) {
-            // Without the overlay permission this throws; the activity is
-            // supposed to have asked for it first.
-            Log.e(TAG, "Could not add the overlay window", e)
+            // Previously this swallowed the exception and returned, so the user
+            // saw nothing at all and had no idea why. Surface it: a missing
+            // overlay permission on HyperOS is the most common cause, but the
+            // actual exception should be visible either way.
+            val reason = "${e.javaClass.simpleName}: ${e.message}"
+            lastError = reason
+            Log.e(TAG, "Could not add the overlay window: $reason", e)
+            mainHandler.post {
+                android.widget.Toast.makeText(
+                    context,
+                    "悬浮窗显示失败：$reason\n请检查「悬浮窗」和「后台弹出界面」权限",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
             return
         }
 
+        lastError = null
         panel = view
         params = layoutParams
         showing = true
@@ -118,12 +140,27 @@ class GlyphOverlayWindow(private val context: Context) {
         showing = false
     }
 
+    /**
+     * Show a plain-language status on the panel before any snapshot arrives.
+     * Safe to call from the capture thread; the write lands on the main thread.
+     */
+    fun setStatus(text: String?) {
+        pendingStatus = text
+        mainHandler.post {
+            panel?.statusText = text
+            panel?.invalidate()
+        }
+    }
+
     fun update(snapshot: GlyphDisplaySnapshot?) {
-        panel?.snapshot = snapshot
+        mainHandler.post {
+            panel?.snapshot = snapshot
+            panel?.invalidate()
+        }
     }
 
     fun setGlyphTable(table: GlyphTable?) {
-        panel?.table = table
+        mainHandler.post { panel?.table = table }
     }
 
     /** Drag the panel; the game keeps receiving everything outside it. */
@@ -172,6 +209,12 @@ class GlyphOverlayWindow(private val context: Context) {
 
         var snapshot: GlyphDisplaySnapshot? = null
         var table: GlyphTable? = null
+
+        /**
+         * Plain-language status shown until the first recognition snapshot, and
+         * again if the pipeline reports a failure. May contain newlines.
+         */
+        var statusText: String? = null
 
         private val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.argb(235, 10, 13, 20)
@@ -228,12 +271,18 @@ class GlyphOverlayWindow(private val context: Context) {
 
             val current = snapshot
             if (current == null) {
-                ringPaint.color = IDLE
+                val message = statusText ?: "Waiting for capture"
+                ringPaint.color = if (statusText == null) IDLE else WARNING
                 canvas.drawRoundRect(
                     RectF(2f * density, 2f * density, w - 2f * density, h - 2f * density),
                     radius, radius, ringPaint
                 )
-                canvas.drawText("Waiting for capture", w / 2f, h / 2f, statusPaint)
+                val lines = message.split("\n")
+                val lineHeight = 17f * density
+                val startY = h / 2f - (lines.size - 1) * lineHeight / 2f
+                for (index in lines.indices) {
+                    canvas.drawText(lines[index], w / 2f, startY + index * lineHeight, statusPaint)
+                }
                 return
             }
 

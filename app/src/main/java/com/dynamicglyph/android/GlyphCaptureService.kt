@@ -67,23 +67,34 @@ class GlyphCaptureService : Service() {
     }
 
     private fun handleStart(intent: Intent) {
+        // Show the panel *first*, before anything that can fail. Previously the
+        // window was only added after a successful start, so any failure left the
+        // screen completely blank with no clue about where it stopped.
+        captureEngine?.release()
+        captureEngine = null
+        overlayWindow?.setStatus("正在启动…")
+        overlayWindow?.show()
+
+        try {
+            startForeground()
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not start foreground service", e)
+            overlayWindow?.setStatus("启动失败：前台服务被系统拒绝\n${e.message ?: ""}")
+            return
+        }
+
         val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, 0)
         @Suppress("DEPRECATION")
         val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
         if (resultData == null) {
-            Log.e(TAG, "Start intent carried no projection data")
-            stopSelf()
+            reportStatus("启动失败：没有拿到系统截屏授权\n请回 App 重新点「开始截屏」")
             return
         }
 
         val glyphCsv = intent.getStringExtra(EXTRA_GLYPH_CSV)
         val sequenceCsv = intent.getStringExtra(EXTRA_SEQUENCE_CSV)
         if (glyphCsv == null || sequenceCsv == null) {
-            // The reference tables are not redistributed with this project, so
-            // there is nothing to fall back to. Say so and stop, rather than
-            // capture frames nothing can read.
-            Log.e(TAG, "Start intent carried no tables")
-            stopSelf()
+            reportStatus("启动失败：缺少两个 CSV 数据文件\n请在 App 里先加载")
             return
         }
 
@@ -91,26 +102,27 @@ class GlyphCaptureService : Service() {
             overlayWindow?.update(snapshot)
         }
 
-        try {
+        val table = try {
             engine.loadTables(glyphCsv, sequenceCsv)
+            GlyphTable.parse(glyphCsv)
         } catch (e: Exception) {
             Log.e(TAG, "Tables could not be parsed", e)
-            stopSelf()
+            reportStatus("启动失败：CSV 内容读不了\n${e.message ?: ""}")
             return
         }
 
-        startForeground()
-
-        if (!engine.start(resultCode, resultData)) {
-            Log.e(TAG, "Capture could not start")
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+        val failure = engine.start(resultCode, resultData)
+        if (failure != null) {
+            Log.e(TAG, "Capture could not start: $failure")
+            reportStatus("启动失败：$failure")
+            // Keep the service alive so the message stays visible. The user can
+            // stop it from the app's button.
             return
         }
 
         captureEngine = engine
-        overlayWindow?.setGlyphTable(GlyphTable.parse(glyphCsv))
-        overlayWindow?.show()
+        overlayWindow?.setGlyphTable(table)
+        reportStatus("截屏已启动\n切到 Ingress 触发一次 Glyph Hack")
         isRunning = true
     }
 
@@ -132,12 +144,22 @@ class GlyphCaptureService : Service() {
     private fun startForeground() {
         startForeground(
             NOTIFICATION_ID,
-            createNotification(),
+            createNotification(getString(R.string.capture_notification_text)),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
         )
     }
 
-    private fun createNotification(): Notification {
+    /**
+     * Put the same status in the notification. If HyperOS refuses the overlay
+     * window, the notification is the one surface that still shows what happened.
+     */
+    private fun reportStatus(text: String) {
+        overlayWindow?.setStatus(text)
+        getSystemService(NotificationManager::class.java)
+            .notify(NOTIFICATION_ID, createNotification(text.replace("\n", " ")))
+    }
+
+    private fun createNotification(text: String): Notification {
         val open = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this,
@@ -148,7 +170,8 @@ class GlyphCaptureService : Service() {
 
         return Notification.Builder(this, CHANNEL_CAPTURE)
             .setContentTitle(getString(R.string.capture_notification_title))
-            .setContentText(getString(R.string.capture_notification_text))
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentIntent(pendingIntent)
             .setOngoing(true)

@@ -133,13 +133,16 @@ class CaptureEngine(
 
     /**
      * Start capturing from a MediaProjection consent result.
-     * Returns false if the projection could not be created.
+     *
+     * Returns `null` on success, or a plain-language reason for failure. The
+     * caller shows that reason in the overlay: a silent `false` left the user
+     * staring at a screen with nothing on it and no way to tell what went wrong.
      */
-    fun start(resultCode: Int, data: Intent): Boolean {
-        if (capturing) return true
+    fun start(resultCode: Int, data: Intent): String? {
+        if (capturing) return null
         if (frameSession == null) {
             Log.e(TAG, "Refusing to start without a shape table")
-            return false
+            return "没有加载图形表，请先在 App 里加载两个 CSV"
         }
 
         val manager = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE)
@@ -148,8 +151,8 @@ class CaptureEngine(
             manager.getMediaProjection(resultCode, data)
         } catch (e: Exception) {
             Log.e(TAG, "getMediaProjection failed", e)
-            return false
-        } ?: return false
+            return "截屏授权失效：${e.javaClass.simpleName}\n请重新点「开始截屏」授权"
+        } ?: return "系统没有授予截屏权限\n请重新点「开始截屏」并选「立即开始」"
 
         val metrics = DisplayMetrics()
         val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -185,16 +188,34 @@ class CaptureEngine(
             }
         }, handler)
 
-        val display = mediaProjection.createVirtualDisplay(
-            VIRTUAL_DISPLAY_NAME,
-            width,
-            height,
-            metrics.densityDpi,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            reader.surface,
-            null,
-            handler
-        )
+        val display = try {
+            mediaProjection.createVirtualDisplay(
+                VIRTUAL_DISPLAY_NAME,
+                width,
+                height,
+                metrics.densityDpi,
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                reader.surface,
+                null,
+                handler
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "createVirtualDisplay failed", e)
+            reader.close()
+            thread.quitSafely()
+            mediaProjection.stop()
+            return "无法开始录屏：${e.javaClass.simpleName}\n${e.message ?: ""}"
+        }
+        if (display == null) {
+            // HyperOS and some OEM builds refuse the virtual display without
+            // throwing. Treating that as success produced a live service with no
+            // frames and an overlay nobody could see.
+            Log.e(TAG, "createVirtualDisplay returned null")
+            reader.close()
+            thread.quitSafely()
+            mediaProjection.stop()
+            return "系统拒绝了录屏（虚拟显示器为空）\n请检查电池权限与后台弹出界面权限"
+        }
 
         projection = mediaProjection
         virtualDisplay = display
@@ -214,7 +235,7 @@ class CaptureEngine(
 
         capturing = true
         Log.i(TAG, "Capture started at ${width}x$height")
-        return true
+        return null
     }
 
     fun stop() {

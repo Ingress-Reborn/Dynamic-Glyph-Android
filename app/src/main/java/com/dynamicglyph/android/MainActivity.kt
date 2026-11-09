@@ -69,6 +69,9 @@ class MainActivity : ComponentActivity() {
     private var projectionResultCode = 0
     private var projectionData: Intent? = null
 
+    /** A diagnostic overlay that needs no screen-capture consent. */
+    private var testOverlay: com.dynamicglyph.display.GlyphOverlayWindow? = null
+
     private val mediaProjectionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -176,7 +179,28 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Section("Capture") {
+                Section("① 先测悬浮窗（不需要截屏授权）") {
+                    Text(
+                        text = "点一下，屏幕上应该出现一个黑色小框。" +
+                            "看不到就是权限问题，跟识别代码无关。",
+                        fontSize = 12.sp,
+                        color = Color(0xFF9FA0B8),
+                        lineHeight = 17.sp
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Button(
+                        onClick = { toggleTestOverlay() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF232338),
+                            contentColor = Color(0xFF73D9F2)
+                        )
+                    ) {
+                        Text("显示 / 关闭测试浮窗", fontSize = 13.sp)
+                    }
+                }
+
+                Section("② 开始截屏识别") {
                     Button(
                         onClick = {
                             if (!hasGlyph || !hasSequence) {
@@ -292,6 +316,47 @@ class MainActivity : ComponentActivity() {
             Spacer(Modifier.width(8.dp))
             Text(label, fontSize = 13.sp)
         }
+    }
+
+    // -- Overlay self-test --
+
+    /**
+     * Isolate the most common failure. This needs only the overlay permission,
+     * not MediaProjection, so the result says unambiguously whether HyperOS is
+     * letting the app draw over other apps.
+     */
+    private fun toggleTestOverlay() {
+        if (!Settings.canDrawOverlays(this)) {
+            toast(getString(R.string.permission_overlay_required))
+            startActivityForResult(
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                ),
+                REQUEST_OVERLAY
+            )
+            return
+        }
+
+        val existing = testOverlay
+        if (existing != null) {
+            existing.hide()
+            testOverlay = null
+            toast("测试浮窗已关闭")
+            return
+        }
+
+        val window = com.dynamicglyph.display.GlyphOverlayWindow(this)
+        window.setStatus("✅ 悬浮窗权限正常\n看得到这个框，说明浮窗能显示")
+        window.show()
+        testOverlay = window
+        toast(window.lastError ?: "应该已经显示了；再点一次可关闭")
+    }
+
+    override fun onDestroy() {
+        testOverlay?.hide()
+        testOverlay = null
+        super.onDestroy()
     }
 
     // -- Tables --
