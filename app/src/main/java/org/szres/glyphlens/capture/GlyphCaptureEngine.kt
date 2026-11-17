@@ -20,6 +20,7 @@ import org.szres.glyphlens.recognition.image.GameUILayoutLocator
 import org.szres.glyphlens.recognition.image.GlyphFrameObservation
 import org.szres.glyphlens.recognition.image.GlyphFrameSession
 import org.szres.glyphlens.recognition.image.LumaGate
+import org.szres.glyphlens.recognition.image.LumaGateReading
 import org.szres.glyphlens.recognition.image.MapControlReader
 import org.szres.glyphlens.recognition.image.NodeArrayDetection
 import org.szres.glyphlens.recognition.image.SlotStripReader
@@ -97,19 +98,74 @@ class GlyphCaptureEngine internal constructor(
     )
 
     fun process(captured: CapturedFrame, power: PowerConditions.State): GlyphDisplaySnapshot {
-        if (closed) return latest
+        val frame = captured.rgba
+        val wanted = admit(
+            sourceTimeNanos = frame.timestampNanos,
+            status = captured.status,
+            continuityBroken = captured.continuityBroken,
+            width = frame.width,
+            height = frame.height,
+            power = power,
+        ) { gate.read(frame) }
+        return if (wanted) analyse(frame) else latest
+    }
+
+    /** A capture whose pixels are still in the source buffer and are copied only on request. */
+    internal interface FramePixels {
+        /** Every [rowStep]th row from [firstRow], packed in order as RGBA. */
+        fun rows(firstRow: Int, rowStep: Int): ByteArray
+
+        /** The whole frame. */
+        fun frame(): RgbaFrame
+    }
+
+    /**
+     * As [process] of the copied frame, but a frame the pace rejects costs at most the rows the
+     * luminance gate samples, and none at all during a hack.
+     */
+    internal fun process(
+        pixels: FramePixels,
+        sourceTimeNanos: Long,
+        width: Int,
+        height: Int,
+        status: CaptureFrameStatus,
+        continuityBroken: Boolean,
+        power: PowerConditions.State,
+    ): GlyphDisplaySnapshot {
+        val wanted = admit(sourceTimeNanos, status, continuityBroken, width, height, power) {
+            gate.readSampledRows(pixels.rows(gate.firstSampledRow, gate.step), width, height)
+        }
+        return if (wanted) analyse(pixels.frame()) else latest
+    }
+
+    /**
+     * Decides from a frame's metadata whether its pixels will be analysed, so a caller can leave
+     * the rest of a rejected frame uncopied. [luma] is asked only when the pace depends on the
+     * screen, and must describe this frame exactly as [LumaGate.read] would. A true result must
+     * be followed by [analyse] with the same frame; otherwise [latest] is already current.
+     */
+    internal fun admit(
+        sourceTimeNanos: Long,
+        status: CaptureFrameStatus,
+        continuityBroken: Boolean,
+        width: Int,
+        height: Int,
+        power: PowerConditions.State,
+        luma: () -> LumaGateReading?,
+    ): Boolean {
+        admitted = null
+        if (closed) return false
         meter.count(PowerMetric.FRAMES_DELIVERED)
         val intakeStarted = meter.now()
-        var analysisStarted: Long? = null
+        var accepted = false
         try {
-            if (!acceptCapture(captured)) return latest
-            val frame = captured.rgba
-            val at = captured.sourceTimeSeconds
+            val at = sourceTimeNanos / 1_000_000_000.0
+            if (!acceptCapture(at, status, continuityBroken, width, height)) return false
             val savesPower = powerSaving()
             val inHack = !hasMapControl && isInHack(at)
             val constrained = savesPower && power.isConstrained
             val decision = if (savesPower) {
-                pace.decide(at, if (inHack) null else gate.read(frame), busy = sawActivity, inHack = inHack, constrained = constrained)
+                pace.decide(at, if (inHack) null else luma(), busy = sawActivity, inHack = inHack, constrained = constrained)
             } else {
                 AnalysisRateController.Decision(AnalysisRateController.Mode.ACTIVE, pace.policy.activeInterval)
             }
@@ -118,11 +174,41 @@ class GlyphCaptureEngine internal constructor(
                 at = at,
                 current = PowerReadingMode(decision.mode, decision.interval, savesPower, inHack),
             )
-            if (at >= lastSample && at - lastSample < decision.interval) return latest
+            if (at >= lastSample && at - lastSample < decision.interval) return false
             lastSample = at
-            val started = meter.now().also { analysisStarted = it }
+            meter.record(PowerMetric.FRAME_INTAKE, (meter.now() - intakeStarted).coerceAtLeast(0))
+            admitted = Admission(sourceTimeNanos, width, height, decision, savesPower)
+            accepted = true
+            return true
+        } finally {
+            if (!accepted) meter.finish(PowerMetric.SKIPPED_FRAME, intakeStarted)
+        }
+    }
+
+    private class Admission(
+        val sourceTimeNanos: Long,
+        val width: Int,
+        val height: Int,
+        val decision: AnalysisRateController.Decision,
+        val savesPower: Boolean,
+    )
+
+    private var admitted: Admission? = null
+
+    /** Analyses the pixels of the frame [admit] just accepted. */
+    internal fun analyse(frame: RgbaFrame): GlyphDisplaySnapshot {
+        val admission = admitted
+        admitted = null
+        check(
+            admission != null && admission.sourceTimeNanos == frame.timestampNanos &&
+                admission.width == frame.width && admission.height == frame.height,
+        ) { "analyse requires the frame that admit accepted" }
+        val at = frame.timestampNanos / 1_000_000_000.0
+        val decision = admission.decision
+        val savesPower = admission.savesPower
+        val started = meter.now()
+        try {
             meter.count(PowerMetric.FRAMES_ANALYSED)
-            meter.record(PowerMetric.FRAME_INTAKE, (started - intakeStarted).coerceAtLeast(0))
 
             val conversionStarted = meter.now()
             val image = frame.toImageFrame(fullColor = true)
@@ -195,18 +281,18 @@ class GlyphCaptureEngine internal constructor(
             latest = snapshot(observation, at, calibration = fit)
             return latest
         } finally {
-            val started = analysisStarted
-            if (started == null) {
-                meter.finish(PowerMetric.SKIPPED_FRAME, intakeStarted)
-            } else {
-                meter.finish(PowerMetric.FRAME_WORK, started)
-            }
+            meter.finish(PowerMetric.FRAME_WORK, started)
         }
     }
 
-    private fun acceptCapture(captured: CapturedFrame): Boolean {
-        val at = captured.sourceTimeSeconds
-        if (captured.continuityBroken || at < lastPresentation) {
+    private fun acceptCapture(
+        at: Double,
+        status: CaptureFrameStatus,
+        continuityBroken: Boolean,
+        width: Int,
+        height: Int,
+    ): Boolean {
+        if (continuityBroken || at < lastPresentation) {
             mapControls.reset()
             hasMapControl = false
             layoutLocator.reset()
@@ -216,8 +302,8 @@ class GlyphCaptureEngine internal constructor(
         }
         lastPresentation = at
         // A repeated source time does not provide new pixels or fresh phase evidence.
-        if (captured.status == CaptureFrameStatus.IDLE) return false
-        if (captured.status != CaptureFrameStatus.COMPLETE) {
+        if (status == CaptureFrameStatus.IDLE) return false
+        if (status != CaptureFrameStatus.COMPLETE) {
             mapControls.reset()
             hasMapControl = false
             frameSession?.reset()
@@ -226,11 +312,11 @@ class GlyphCaptureEngine internal constructor(
                 observation = null,
                 sourceTime = at,
                 liveness = CaptureLiveness.INTERRUPTED,
-                acceptance = AcceptanceMode.ProvisionalOnly("capture ${captured.status.name.lowercase()}"),
+                acceptance = AcceptanceMode.ProvisionalOnly("capture ${status.name.lowercase()}"),
             )
             return false
         }
-        if (captured.rgba.width >= captured.rgba.height) {
+        if (width >= height) {
             mapControls.reset()
             hasMapControl = false
             frameSession?.reset()

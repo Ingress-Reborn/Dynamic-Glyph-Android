@@ -185,59 +185,121 @@ class NodeArrayDetector {
         val regionWidth = right - left
         val regionHeight = bottom - top
         val isLocal = regionWidth != width || regionHeight != height
-        val visited = BooleanArray(regionWidth * regionHeight)
-        val stack = ArrayDeque<Int>()
-        val rings = mutableListOf<Ring>()
-        for (start in visited.indices) {
-            if (visited[start]) continue
-            visited[start] = true
-            val startX = start % regionWidth + left
-            val startY = start / regionWidth + top
-            if (image[startY * width + startX] < 160) continue
-            stack.addLast(start)
-            var count = 0
-            var sx = 0.0
-            var sy = 0.0
-            var minX = width
-            var minY = height
-            var maxX = 0
-            var maxY = 0
-            while (stack.isNotEmpty()) {
-                val index = stack.removeLast()
-                val x = index % regionWidth + left
-                val y = index / regionWidth + top
-                count++
-                sx += x
-                sy += y
-                minX = min(minX, x)
-                maxX = max(maxX, x)
-                minY = min(minY, y)
-                maxY = max(maxY, y)
-                for (ny in max(top, y - 1)..min(bottom - 1, y + 1)) {
-                    for (nx in max(left, x - 1)..min(right - 1, x + 1)) {
-                        val next = (ny - top) * regionWidth + nx - left
-                        if (visited[next]) continue
+        val minimumDiameter = max(5.0, scale * 0.015)
+        // A ring is at least this many rows tall: its diameter averages a box whose width is at
+        // most 1.33 times its height. Seeding every such row therefore meets every ring, and the
+        // shorter components it can miss are rejected by the size test below anyway.
+        val seedStep = max(1, (minimumDiameter / 1.165).toInt())
+        val cells = regionWidth * regionHeight
+        if (visited.size < cells) visited = BooleanArray(cells) else visited.fill(false, 0, cells)
+        val visited = visited
+        var stack = stack
+        var firsts = IntArray(16)
+        val rings = ArrayList<Ring>()
+        var seedRow = seedStep - 1
+        while (seedRow < regionHeight) {
+            val rowStart = seedRow * regionWidth
+            val imageRow = (seedRow + top) * width + left
+            for (column in 0 until regionWidth) {
+                val start = rowStart + column
+                if (visited[start]) continue
+                visited[start] = true
+                if (image[imageRow + column] < 160) continue
+                var depth = 1
+                stack[0] = start
+                var count = 0
+                var sx = 0.0
+                var sy = 0.0
+                var minX = width
+                var minY = height
+                var maxX = 0
+                var maxY = 0
+                var first = start
+                // Each popped seed claims its whole unvisited bright run, then seeds the runs that
+                // touch it in the rows above and below; the pixels of one 8-connected component are
+                // each counted once, exactly as a pixel-by-pixel fill would count them.
+                while (depth > 0) {
+                    val index = stack[--depth]
+                    val row = index / regionWidth
+                    val rowBase = row * regionWidth
+                    val imageBase = (row + top) * width + left
+                    var runLeft = index - rowBase
+                    var runRight = runLeft
+                    while (runLeft > 0) {
+                        val next = rowBase + runLeft - 1
+                        if (visited[next]) break
                         visited[next] = true
-                        if (image[ny * width + nx] >= 160) stack.addLast(next)
+                        if (image[imageBase + runLeft - 1] < 160) break
+                        runLeft--
+                    }
+                    while (runRight < regionWidth - 1) {
+                        val next = rowBase + runRight + 1
+                        if (visited[next]) break
+                        visited[next] = true
+                        if (image[imageBase + runRight + 1] < 160) break
+                        runRight++
+                    }
+                    val length = runRight - runLeft + 1
+                    if (rowBase + runLeft < first) first = rowBase + runLeft
+                    count += length
+                    sx += (left.toLong() * length + (runLeft + runRight).toLong() * length / 2).toDouble()
+                    sy += ((row + top).toLong() * length).toDouble()
+                    minX = min(minX, runLeft + left)
+                    maxX = max(maxX, runRight + left)
+                    minY = min(minY, row + top)
+                    maxY = max(maxY, row + top)
+                    val from = max(0, runLeft - 1)
+                    val to = min(regionWidth - 1, runRight + 1)
+                    var neighbour = row - 1
+                    while (neighbour <= row + 1) {
+                        if (neighbour in 0 until regionHeight) {
+                            val base = neighbour * regionWidth
+                            val pixels = (neighbour + top) * width + left
+                            var inRun = false
+                            for (x in from..to) {
+                                val next = base + x
+                                if (visited[next]) {
+                                    inRun = false
+                                } else if (image[pixels + x] < 160) {
+                                    visited[next] = true
+                                    inRun = false
+                                } else if (!inRun) {
+                                    // The rest of this run stays unvisited for its seed to claim.
+                                    visited[next] = true
+                                    if (depth == stack.size) stack = stack.copyOf(depth * 2)
+                                    stack[depth++] = next
+                                    inRun = true
+                                }
+                            }
+                        }
+                        neighbour += 2
                     }
                 }
+                // A clipped fragment can look annular; local verification requires the complete ring.
+                if (isLocal && (minX == left || minY == top || maxX == right - 1 || maxY == bottom - 1)) continue
+                val boxWidth = (maxX - minX + 1).toDouble()
+                val boxHeight = (maxY - minY + 1).toDouble()
+                val diameter = (boxWidth + boxHeight) / 2.0
+                val fill = count / (boxWidth * boxHeight)
+                if (diameter < minimumDiameter || diameter > scale * 0.07 ||
+                    boxWidth / boxHeight < 0.75 || boxWidth / boxHeight > 1.33 ||
+                    fill < 0.15 || fill > 0.65
+                ) continue
+                val center = GlyphPoint(sx / count, sy / count)
+                if (image.sample(center) >= 160.0) continue // A ring has a hole.
+                if (rings.size == firsts.size) firsts = firsts.copyOf(firsts.size * 2)
+                firsts[rings.size] = first
+                rings.add(Ring(center, diameter / 2.0))
             }
-            // A clipped fragment can look annular; local verification requires the complete ring.
-            if (isLocal && (minX == left || minY == top || maxX == right - 1 || maxY == bottom - 1)) continue
-            val boxWidth = (maxX - minX + 1).toDouble()
-            val boxHeight = (maxY - minY + 1).toDouble()
-            val diameter = (boxWidth + boxHeight) / 2.0
-            val fill = count / (boxWidth * boxHeight)
-            if (diameter < max(5.0, scale * 0.015) || diameter > scale * 0.07 ||
-                boxWidth / boxHeight < 0.75 || boxWidth / boxHeight > 1.33 ||
-                fill < 0.15 || fill > 0.65
-            ) continue
-            val center = GlyphPoint(sx / count, sy / count)
-            if (image.sample(center) >= 160.0) continue // A ring has a hole.
-            rings.add(Ring(center, diameter / 2.0))
+            seedRow += seedStep
         }
-        return rings
+        this.stack = stack
+        // Report rings in raster order of their first pixel, as a scan of every row would.
+        return rings.indices.sortedBy { firsts[it] }.map { rings[it] }
     }
+
+    private var visited = BooleanArray(0)
+    private var stack = IntArray(256)
 
     private fun component(point: GlyphPoint, axis: Int): Double = if (axis == 0) point.x else point.y
 

@@ -30,6 +30,7 @@ import org.szres.glyphlens.diagnostics.PowerMetric
 import org.szres.glyphlens.overlay.OverlayController
 import org.szres.glyphlens.recognition.CaptureSessionID
 import org.szres.glyphlens.recognition.GlyphDisplaySnapshot
+import org.szres.glyphlens.recognition.RgbaFrame
 import org.szres.glyphlens.settings.AppPreferences
 import org.szres.glyphlens.tables.TableController
 import org.szres.glyphlens.ui.MainActivity
@@ -60,6 +61,9 @@ class CaptureService : Service() {
     private var virtualDisplay: VirtualDisplay? = null
     private var reader: ImageReader? = null
     private var captureSize: CaptureSize? = null
+    /** Pixels of the last analysed frame; the engine keeps no frame after a call returns. */
+    private var framePixels: ByteArray? = null
+    private var gateRows: ByteArray? = null
     private val overlayVisibility = RealtimeOverlayVisibility()
     private var hidesAfterDrawing = true
 
@@ -241,19 +245,34 @@ class CaptureService : Service() {
                 return@use
             }
             val plane = image.planes.single()
-            val frame = try {
-                val copyStarted = PowerMeter.shared.now()
-                FrameConverter.read(
-                    image.width, image.height, image.timestamp,
-                    plane.pixelStride, plane.rowStride, plane.buffer,
-                ).also { PowerMeter.shared.finish(PowerMetric.CAPTURE_COPY, copyStarted) }
-            } catch (_: IllegalArgumentException) {
+            val engine = captureEngine ?: return@use
+            val pixels = object : GlyphCaptureEngine.FramePixels {
+                override fun rows(firstRow: Int, rowStep: Int): ByteArray = copying {
+                    FrameConverter.readRows(
+                        image.width, image.height, plane.pixelStride, plane.rowStride, plane.buffer,
+                        firstRow, rowStep, gateRows,
+                    ).also { gateRows = it }
+                }
+
+                override fun frame(): RgbaFrame = copying {
+                    FrameConverter.read(
+                        image.width, image.height, image.timestamp,
+                        plane.pixelStride, plane.rowStride, plane.buffer, framePixels,
+                    ).also {
+                        framePixels = it.pixels
+                        PowerMeter.shared.noteMemory(PowerMemoryKind.RGBA_FRAME, it.pixels.size.toLong())
+                    }
+                }
+            }
+            val snapshot = try {
+                engine.process(
+                    pixels, image.timestamp, image.width, image.height,
+                    metadata.status, metadata.continuityBroken, powerConditions.current,
+                )
+            } catch (_: UnreadableFrame) {
                 stopSession(getString(R.string.status_start_failed))
                 return@use
             }
-            PowerMeter.shared.noteMemory(PowerMemoryKind.RGBA_FRAME, frame.pixels.size.toLong())
-            val captured = CapturedFrame(frame, metadata.status, arrival, metadata.continuityBroken)
-            val snapshot = captureEngine?.process(captured, powerConditions.current) ?: return@use
             publishSnapshot(snapshot, arrival)
             if (currentState == SessionState.STARTING) {
                 currentState = SessionState.RUNNING
@@ -442,6 +461,8 @@ class CaptureService : Service() {
         reader = null
         captureEngine?.close()
         captureEngine = null
+        framePixels = null
+        gateRows = null
     }
 
     private fun createNotificationChannel() {
@@ -523,5 +544,19 @@ class CaptureService : Service() {
         @Volatile
         var frameCount = 0L
             private set
+    }
+}
+
+/** The capture buffer did not have the layout its image reported. */
+private class UnreadableFrame(cause: IllegalArgumentException) : Exception(cause)
+
+private inline fun <T> copying(read: () -> T): T {
+    val started = PowerMeter.shared.now()
+    try {
+        return read()
+    } catch (error: IllegalArgumentException) {
+        throw UnreadableFrame(error)
+    } finally {
+        PowerMeter.shared.finish(PowerMetric.CAPTURE_COPY, started)
     }
 }

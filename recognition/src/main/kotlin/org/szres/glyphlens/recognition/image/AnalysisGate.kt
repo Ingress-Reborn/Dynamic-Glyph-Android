@@ -30,10 +30,9 @@ data class LumaGateReading(
 
 class LumaGate(step: Int = 4) {
     val step: Int = max(1, step)
-    private val samplingStep = this.step
 
-    /** [luma] returns full-range luminance in 0...255. */
-    fun read(width: Int, height: Int, luma: (Int, Int) -> Int): LumaGateReading? {
+    /** [luma] returns full-range luminance in 0...255. Inlined so each source is sampled without boxing. */
+    inline fun read(width: Int, height: Int, luma: (Int, Int) -> Int): LumaGateReading? {
         if (width <= 0 || height <= 0) return null
         val sums = IntArray(GRID_COLUMNS * GRID_ROWS)
         val counts = IntArray(GRID_COLUMNS * GRID_ROWS)
@@ -44,11 +43,11 @@ class LumaGate(step: Int = 4) {
         var dark = 0
         var bright = 0
         var area = 0
-        var y = samplingStep / 2
+        var y = step / 2
         while (y < height) {
             val row = min(GRID_ROWS - 1, y * GRID_ROWS / height) * GRID_COLUMNS
             val inArrayRows = y >= top && y < bottom
-            var x = samplingStep / 2
+            var x = step / 2
             while (x < width) {
                 val value = luma(x, y)
                 val cell = row + min(GRID_COLUMNS - 1, x * GRID_COLUMNS / width)
@@ -59,9 +58,9 @@ class LumaGate(step: Int = 4) {
                     if (value < DARK_LEVEL) dark++
                     else if (value > BRIGHT_LEVEL) bright++
                 }
-                x += samplingStep
+                x += step
             }
-            y += samplingStep
+            y += step
         }
         val cells = sums.indices.map { index ->
             if (counts[index] > 0) (sums[index] / counts[index]).coerceIn(0, 255) else 0
@@ -104,6 +103,36 @@ class LumaGate(step: Int = 4) {
             val red = pixels[pixel].toInt() and 0xff
             val green = pixels[pixel + 1].toInt() and 0xff
             val blue = pixels[pixel + 2].toInt() and 0xff
+            (29 * blue + 150 * green + 77 * red) shr 8
+        }
+    }
+
+    /** How many rows of a frame this gate samples; the first is [firstSampledRow], then every [step]. */
+    fun sampledRowCount(height: Int): Int =
+        if (height <= firstSampledRow) 0 else (height - firstSampledRow + step - 1) / step
+
+    val firstSampledRow: Int get() = step / 2
+
+    /**
+     * Reads a frame from only the rows the gate samples, packed in order as RGBA. The reading
+     * equals [readRgba] of the whole frame, so a caller can gate a capture before copying it.
+     */
+    fun readSampledRows(
+        rows: ByteArray,
+        width: Int,
+        height: Int,
+        bytesPerRow: Int = width * 4,
+    ): LumaGateReading? {
+        if (width <= 0 || height <= 0) return null
+        require(bytesPerRow >= width * 4) { "RGBA row stride is too small" }
+        require(sampledRowCount(height).toLong() * bytesPerRow <= rows.size) { "Sampled rows are truncated" }
+        val first = firstSampledRow
+        val step = step
+        return read(width, height) { x, y ->
+            val pixel = (y - first) / step * bytesPerRow + x * 4
+            val red = rows[pixel].toInt() and 0xff
+            val green = rows[pixel + 1].toInt() and 0xff
+            val blue = rows[pixel + 2].toInt() and 0xff
             (29 * blue + 150 * green + 77 * red) shr 8
         }
     }

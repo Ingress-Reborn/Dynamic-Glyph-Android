@@ -2,6 +2,7 @@ package org.szres.glyphlens.recognition.image
 
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -38,6 +39,10 @@ class MapControlReader {
     private var height = 0
     private var states = ByteArray(0)
     private var queue = IntArray(0)
+    private var regionTop = 0
+    private var regionRight = 0
+    private var regionLeft = 0
+    private var regionLeftBottom = 0
 
     fun reset() {
         cached = null
@@ -70,11 +75,18 @@ class MapControlReader {
             queue = IntArray(states.size)
         } else states.fill(0)
 
-        for (y in 0 until rows) {
+        // Whole-cell bounds of the search region; the comparisons equal the fractional ones.
+        regionTop = ceil(rows * 0.08).toInt()
+        regionRight = ceil(columns * 0.65).toInt()
+        regionLeft = floor(columns * 0.30).toInt()
+        regionLeftBottom = floor(rows * 0.80).toInt()
+        for (y in regionTop until rows) {
+            val leftEnd = if (y <= regionLeftBottom) regionLeft else -1
             for (x in 0 until columns) {
+                if (x > leftEnd && x < regionRight) continue
                 val index = y * columns + x
                 if (states[index].toInt() != 0) continue
-                if (!isSearchRegion(x, y, columns, rows) || !bright(image, x * step, y * step)) {
+                if (!bright(image, x * step, y * step)) {
                     states[index] = 1
                     continue
                 }
@@ -124,7 +136,7 @@ class MapControlReader {
                     val next = ny * columns + nx
                     if (states[next].toInt() != 0) continue
                     states[next] = 1
-                    if (isSearchRegion(nx, ny, columns, rows) && bright(image, nx * step, ny * step)) {
+                    if (isSearchRegion(nx, ny) && bright(image, nx * step, ny * step)) {
                         states[next] = 2
                         queue[tail++] = next
                     }
@@ -134,8 +146,8 @@ class MapControlReader {
         return Component(left, top, right, bottom, tail)
     }
 
-    private fun isSearchRegion(x: Int, y: Int, columns: Int, rows: Int): Boolean =
-        y >= rows * 0.08 && (x >= columns * 0.65 || x <= columns * 0.30 && y <= rows * 0.80)
+    private fun isSearchRegion(x: Int, y: Int): Boolean =
+        y >= regionTop && (x >= regionRight || x <= regionLeft && y <= regionLeftBottom)
 
     private fun matches(image: ColorImage, located: Located): Boolean {
         val pattern = located.pattern

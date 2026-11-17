@@ -30,6 +30,29 @@ class LumaGateTest {
     }
 
     @Test
+    fun sampledRowsAloneGiveTheWholeFramesReading() {
+        val random = java.util.Random(11)
+        for ((width, height) in listOf(603 to 1340, 320 to 520, 20 to 40, 7 to 9, 5 to 2, 1 to 1)) {
+            for (step in listOf(1, 2, 4, 5)) {
+                val gate = LumaGate(step)
+                val pixels = ByteArray(width * height * 4).also(random::nextBytes)
+                // Mostly dark, so the candidate thresholds are exercised too.
+                for (index in pixels.indices) if (random.nextInt(3) != 0) pixels[index] = random.nextInt(24).toByte()
+                val rows = ByteArray(gate.sampledRowCount(height) * width * 4)
+                for (row in 0 until gate.sampledRowCount(height)) {
+                    val source = (gate.firstSampledRow + row * step) * width * 4
+                    pixels.copyInto(rows, row * width * 4, source, source + width * 4)
+                }
+                assertEquals(
+                    "$width×$height step $step",
+                    gate.read(RgbaFrame(width, height, 0, pixels)),
+                    gate.readSampledRows(rows, width, height),
+                )
+            }
+        }
+    }
+
+    @Test
     fun paddedPlaneMatchesDecodedPixelsAndVideoRangeIsExplicit() {
         val image = LuminanceImage(7, 9, ByteArray(63) { (it * 3).toByte() })
         val decoded = LumaGate(1).read(image)

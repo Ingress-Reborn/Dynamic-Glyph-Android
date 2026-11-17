@@ -2,6 +2,8 @@ package org.szres.glyphlens.capture
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Test
 import java.nio.ByteBuffer
 
@@ -65,4 +67,37 @@ class FrameConverterTest {
         }
     }
 
+    @Test
+    fun readFillsAMatchingArrayAndReplacesOneOfAnotherSize() {
+        val source = ByteBuffer.wrap(ByteArray(16) { (it + 1).toByte() })
+        val previous = ByteArray(16) { -1 }
+
+        val reused = FrameConverter.read(2, 2, 42, 4, 8, source, reuse = previous)
+        assertSame(previous, reused.pixels)
+        assertArrayEquals(ByteArray(16) { (it + 1).toByte() }, reused.pixels)
+
+        // A resized capture must not inherit a stale buffer.
+        val resized = FrameConverter.read(1, 2, 43, 4, 8, source, reuse = previous)
+        assertNotSame(previous, resized.pixels)
+        assertArrayEquals(byteArrayOf(1, 2, 3, 4, 9, 10, 11, 12), resized.pixels)
+    }
+
+    @Test
+    fun readRowsPacksEverySteppedRowAcrossStrides() {
+        // 2×5 pixels; byte value encodes row and position so any misplaced row is visible.
+        for ((pixelStride, rowStride) in listOf(4 to 8, 4 to 12, 6 to 16)) {
+            val source = ByteArray(rowStride * 5) { -1 }
+            for (y in 0 until 5) for (x in 0 until 2) for (channel in 0 until 4) {
+                source[y * rowStride + x * pixelStride + channel] = (y * 16 + x * 4 + channel).toByte()
+            }
+            fun row(y: Int) = ByteArray(8) { (y * 16 + it).toByte() }
+
+            val rows = FrameConverter.readRows(2, 5, pixelStride, rowStride, ByteBuffer.wrap(source), firstRow = 1, rowStep = 2)
+            assertArrayEquals(row(1) + row(3), rows)
+
+            val reused = FrameConverter.readRows(2, 5, pixelStride, rowStride, ByteBuffer.wrap(source), 0, 2, reuse = ByteArray(24))
+            assertArrayEquals(row(0) + row(2) + row(4), reused)
+            assertEquals(0, FrameConverter.readRows(2, 5, pixelStride, rowStride, ByteBuffer.wrap(source), 5, 2).size)
+        }
+    }
 }

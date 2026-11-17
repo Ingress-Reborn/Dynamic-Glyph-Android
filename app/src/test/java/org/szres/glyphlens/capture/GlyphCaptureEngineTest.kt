@@ -219,6 +219,56 @@ class GlyphCaptureEngineTest {
         }
     }
 
+    @Test
+    fun pixelsCopiedOnRequestGiveTheSameSnapshotsAndCopyOnlyAnalysedFrames() {
+        val frames = buildList {
+            // A quiet bright screen, the map, an empty array, then strokes: every pace the engine has.
+            for (step in 0 until 60) add(frame(1.0 + step * 0.05).also { it.pixels.fill(255.toByte()) })
+            for (step in 0 until 60) add(mapScreen(4.0 + step * 0.05))
+            for (step in 0 until 60) add(glyphScreen(7.0 + step * 0.05, rings = true, slot = true))
+            for (step in 0 until 20) {
+                add(glyphScreen(10.0 + step * 0.05, rings = true, slot = true, highlighted = true))
+            }
+            for (step in 0 until 20) add(glyphScreen(11.0 + step * 0.05, rings = true, slot = true, timer = true))
+        }
+        val copiedMeter = PowerMeter()
+        val lazyMeter = PowerMeter()
+        fixture(meter = copiedMeter).use { copied ->
+            fixture(meter = lazyMeter).use { lazy ->
+                var rowReads = 0
+                var frameReads = 0
+                for (frame in frames) {
+                    val expected = copied.process(frame, power)
+                    val actual = lazy.process(
+                        object : GlyphCaptureEngine.FramePixels {
+                            override fun rows(firstRow: Int, rowStep: Int): ByteArray {
+                                rowReads++
+                                return FrameConverter.readRows(
+                                    frame.width, frame.height, 4, frame.width * 4,
+                                    java.nio.ByteBuffer.wrap(frame.pixels), firstRow, rowStep,
+                                )
+                            }
+
+                            override fun frame(): RgbaFrame {
+                                frameReads++
+                                return frame
+                            }
+                        },
+                        frame.timestampNanos, frame.width, frame.height,
+                        CaptureFrameStatus.COMPLETE, continuityBroken = false, power,
+                    )
+                    assertEquals("snapshot at ${frame.timestampNanos}", expected, actual)
+                }
+                val analysed = lazyMeter.snapshot().total(PowerMetric.FRAMES_ANALYSED).count
+                assertEquals(copiedMeter.snapshot().total(PowerMetric.FRAMES_ANALYSED).count, analysed)
+                assertEquals(analysed, frameReads.toLong())
+                assertTrue("quiet frames must be skipped ($analysed of ${frames.size})", analysed < frames.size - 40)
+                assertTrue("the gate reads rows outside a hack only ($rowReads)", rowReads in 1 until frames.size)
+                assertEquals(TrackingState.INPUT, lazy.latest.state)
+            }
+        }
+    }
+
     private fun fixture(
         meter: PowerMeter = PowerMeter(),
         uptimeNanos: () -> Long = { 0L },
