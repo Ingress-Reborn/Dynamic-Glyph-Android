@@ -25,7 +25,7 @@ Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android �
 
 交付目标仍是 Android 10 / API 29 以上的 arm64、竖屏整屏共享；不要求 root、无障碍服务或麦克风。校准依据当前画面，不为每个品牌或机型添加参数；本轮不声称已实测所有 Android 设备、横屏、分屏或单应用共享。
 
-交付入口：[v0.4.6 Release](https://github.com/Ingress-Reborn/Dynamic-Glyph-Android/releases/tag/v0.4.6) · [Glyph-Lens-0.4.6-arm64.apk](https://github.com/Ingress-Reborn/Dynamic-Glyph-Android/releases/download/v0.4.6/Glyph-Lens-0.4.6-arm64.apk)。0.4.6 只发布到 origin，未同步 [szres/main](https://github.com/szres/dynamic-glyph-android)。完整记录见 [FRAME_COST.md](Docs/FRAME_COST.md)，0.4.5 验收记录见 [DEVICE_CALIBRATION.md](Docs/DEVICE_CALIBRATION.md)。
+交付入口：[v0.4.6 Release](https://github.com/Ingress-Reborn/Dynamic-Glyph-Android/releases/tag/v0.4.6) · [Glyph-Lens-0.4.6-arm64.apk](https://github.com/Ingress-Reborn/Dynamic-Glyph-Android/releases/download/v0.4.6/Glyph-Lens-0.4.6-arm64.apk)。v0.4.6 标签与 Release 在 origin；源码和文档已快进同步到 [szres/main](https://github.com/szres/dynamic-glyph-android)，保留目标历史，未强制推送。完整记录见 [FRAME_COST.md](Docs/FRAME_COST.md)，0.4.5 验收记录见 [DEVICE_CALIBRATION.md](Docs/DEVICE_CALIBRATION.md)。
 
 ## 历史与工程资料
 
