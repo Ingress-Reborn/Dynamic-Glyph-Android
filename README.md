@@ -1,8 +1,8 @@
 # Glyph Lens — Android
 
-Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android 应用。**0.4.5 增加设备点阵校准的保存、复用与重置，并修正槽位定位延迟和标题局部被误认成地图按钮的问题。** 全流程仍使用纯图像特征，不包含 OCR，不新增识别模型或依赖。
+Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android 应用。**0.4.6 降低共用识别底层的单帧开销，识别节奏与结果不变；0.4.5 增加设备点阵校准的保存、复用与重置，并修正槽位定位延迟和标题局部被误认成地图按钮的问题。** 全流程仍使用纯图像特征，不包含 OCR，不新增识别模型或依赖。
 
-本轮实现与增量验收见 [DEVICE_CALIBRATION.md](Docs/DEVICE_CALIBRATION.md)，用户八条规则见 [Plan.md](Plan.md)。本轮 10 项重点 JVM 用例、两段真实素材回放、一项正式包校准流程及五张重点截图人工核对均已通过，v0.4.5 已发布。旧版本的通过数量、APK 大小和 CPU 数字不作为 0.4.5 结果。
+0.4.6 的改动、验证与未证实的省电幅度见 [FRAME_COST.md](Docs/FRAME_COST.md)。以下为 0.4.5 的记录：本轮实现与增量验收见 [DEVICE_CALIBRATION.md](Docs/DEVICE_CALIBRATION.md)，用户八条规则见 [Plan.md](Plan.md)。本轮 10 项重点 JVM 用例、两段真实素材回放、一项正式包校准流程及五张重点截图人工核对均已通过，v0.4.5 已发布。旧版本的通过数量、APK 大小和 CPU 数字不作为 0.4.5 结果。
 
 ## 使用与设置
 
@@ -21,17 +21,18 @@ Glyph Lens 是从 Dynamic Glyph iOS 识别核心迁移而来的原生 Android �
 
 ## 构建与交付
 
-当前源码版本为 **0.4.5 / versionCode 9**，生产源码 `e09da98`。最新增量构建用时 22 秒，签名 APK 为 **413,693 字节，约 0.414 MB**。沿用 Kotlin、Views/Canvas、Gradle/R8 与现有签名发布流程，保持自适应采样节流。此次验证只覆盖新增校准、录屏复现与相关五图识别和预测，不跑全仓库或重复 CPU 对比，不下载发布包验 SHA。
+当前源码版本为 **0.4.6 / versionCode 10**，生产源码 `51709f4`。签名 APK 为 **417,789 字节，约 0.418 MB**。沿用 Kotlin、Views/Canvas、Gradle/R8 与现有签名发布流程，保持自适应采样节流。0.4.6 的验证覆盖新旧实现差分、单元测试、Debug 真实采集 4 项和正式包 3 项黑盒流程；**设备上未测出省电幅度**，不下载发布包验 SHA。
 
 交付目标仍是 Android 10 / API 29 以上的 arm64、竖屏整屏共享；不要求 root、无障碍服务或麦克风。校准依据当前画面，不为每个品牌或机型添加参数；本轮不声称已实测所有 Android 设备、横屏、分屏或单应用共享。
 
-交付入口：[v0.4.5 Release](https://github.com/vhu231/Dynamic-Glyph-Android/releases/tag/v0.4.5) · [Glyph-Lens-0.4.5-arm64.apk](https://github.com/vhu231/Dynamic-Glyph-Android/releases/download/v0.4.5/Glyph-Lens-0.4.5-arm64.apk)。v0.4.5 标签指向生产源码 `e09da98`，Latest Release 和 APK 已发布。源码和最终验收文档已同步 origin/main 与 [szres/main](https://github.com/szres/dynamic-glyph-android)，保留目标历史。完整验收记录见 [DEVICE_CALIBRATION.md](Docs/DEVICE_CALIBRATION.md)。
+交付入口：[v0.4.6 Release](https://github.com/Ingress-Reborn/Dynamic-Glyph-Android/releases/tag/v0.4.6) · [Glyph-Lens-0.4.6-arm64.apk](https://github.com/Ingress-Reborn/Dynamic-Glyph-Android/releases/download/v0.4.6/Glyph-Lens-0.4.6-arm64.apk)。0.4.6 只发布到 origin，未同步 [szres/main](https://github.com/szres/dynamic-glyph-android)。完整记录见 [FRAME_COST.md](Docs/FRAME_COST.md)，0.4.5 验收记录见 [DEVICE_CALIBRATION.md](Docs/DEVICE_CALIBRATION.md)。
 
 ## 历史与工程资料
 
 | 路径 | 用途 |
 | --- | --- |
-| [DEVICE_CALIBRATION.md](Docs/DEVICE_CALIBRATION.md) | 当前 0.4.5 设备校准、定位修复与增量验收 |
+| [FRAME_COST.md](Docs/FRAME_COST.md) | 当前 0.4.6 单帧识别开销优化与验证 |
+| [DEVICE_CALIBRATION.md](Docs/DEVICE_CALIBRATION.md) | 0.4.5 设备校准、定位修复与增量验收 |
 | [Plan.md](Plan.md) | 八条用户规则与本轮约束 |
 | [AUTO_START.md](Docs/AUTO_START.md) | 0.4.4 自动启动、窗口默认设置与验收记录 |
 | [FEATURE_ONLY.md](Docs/FEATURE_ONLY.md) | 0.4.3 全流程去 OCR、原始验收与发布记录 |
